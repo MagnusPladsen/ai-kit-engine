@@ -2704,7 +2704,7 @@ while [ "$FLOW" -le 7 ]; do
                 # Project install: auto-detect stacks from _STACK_DETECT patterns
                 for _si in "${!_STACK_KEYS[@]}"; do
                     _STACK_ACTIVE[$_si]=false
-                    local _detect="${_STACK_DETECT[$_si]}"
+                    _detect="${_STACK_DETECT[$_si]}"
                     if [ -z "$_detect" ]; then
                         _STACK_ACTIVE[$_si]=true  # no detect = always active
                         continue
@@ -2837,7 +2837,7 @@ while [ "$FLOW" -le 7 ]; do
             CB_HEAVY=()
             _stack_cb=("Select your stacks:")
             for _si in "${!_STACK_KEYS[@]}"; do
-                local _rd="${_STACK_RULES_DIRS[$_si]}"
+                _rd="${_STACK_RULES_DIRS[$_si]}"
                 [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
                 CB_TOKENS+=("$(count_category_tokens "$_rd")")
                 CB_INSTALLED+=(0)
@@ -2972,11 +2972,11 @@ while [ "$FLOW" -le 7 ]; do
             # Stack-specific rules — gated on _STACK_ACTIVE
             for _si in "${!_STACK_KEYS[@]}"; do
                 if [ "${_STACK_ACTIVE[$_si]}" = true ]; then
-                    local _rd="${_STACK_RULES_DIRS[$_si]}"
+                    _rd="${_STACK_RULES_DIRS[$_si]}"
                     [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
                     _build_category_files "$_rd"
                     if [ ${#_cat_files[@]} -gt 0 ]; then
-                        local _cat_tk=0
+                        _cat_tk=0
                         for _cf in "${_cat_files[@]}"; do
                             _cat_tk=$((_cat_tk + $(count_tokens "$_cf")))
                         done
