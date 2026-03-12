@@ -1,5 +1,5 @@
 #!/bin/bash
-# Abaris AI Kit — Install script
+# AI Kit Engine — Install script
 # Usage: bash install.sh
 
 set -e
@@ -336,6 +336,52 @@ elif [ -f "$ENGINE_DIR/defaults/kit.toml" ]; then
     _parse_kit_toml "$ENGINE_DIR/defaults/kit.toml"
 fi
 
+# ─── Stack helper functions ───────────────────────────────────────────────────
+
+_stack_index() {
+    local key="$1"
+    for i in "${!_STACK_KEYS[@]}"; do
+        [ "${_STACK_KEYS[$i]}" = "$key" ] && echo "$i" && return
+    done
+    echo "-1"
+}
+
+_stack_active() {
+    local key="$1"
+    local idx=$(_stack_index "$key")
+    [ "$idx" -ge 0 ] && [ "${_STACK_ACTIVE[$idx]}" = true ]
+}
+
+_activate_stack() {
+    local key="$1"
+    local idx=$(_stack_index "$key")
+    [ "$idx" -ge 0 ] && _STACK_ACTIVE[$idx]=true
+}
+
+_activate_all_stacks() {
+    for i in "${!_STACK_ACTIVE[@]}"; do _STACK_ACTIVE[$i]=true; done
+}
+
+_stack_name_by_key() {
+    local key="$1"
+    local idx=$(_stack_index "$key")
+    [ "$idx" -ge 0 ] && echo "${_STACK_NAMES[$idx]}"
+}
+
+# Compatibility: map stack arrays to legacy booleans
+_sync_legacy_stacks() {
+    HAS_REACT=false; HAS_DOTNET=false; HAS_INTEGRATIONS=false
+    for _si in "${!_STACK_KEYS[@]}"; do
+        if [ "${_STACK_ACTIVE[$_si]}" = true ]; then
+            case "${_STACK_KEYS[$_si]}" in
+                react) HAS_REACT=true ;;
+                dotnet) HAS_DOTNET=true ;;
+                integrations) HAS_INTEGRATIONS=true ;;
+            esac
+        fi
+    done
+}
+
 # ─── Platform detection ──────────────────────────────────────────────────────
 
 if [ "$IS_WINDOWS" = false ]; then
@@ -376,13 +422,10 @@ make_gradient() {
 
 # Set theme colors: LIME (primary), TEAL (secondary), GOLD (mid-tone), G1-G8 (gradient)
 # Usage: set_theme "Theme Name"
-CURRENT_THEME="Abaris"
+CURRENT_THEME="$KT_DEFAULT_THEME"
 set_theme() {
     CURRENT_THEME="$1"
     case "$1" in
-        "Abaris")
-            LIME=$'\033[38;2;200;214;75m'   TEAL=$'\033[38;2;62;205;198m'   GOLD=$'\033[38;2;220;200;60m'
-            make_gradient 200 214 75  62 205 198 ;;
         "Tokyo Night")
             LIME=$'\033[38;2;158;206;106m'   TEAL=$'\033[38;2;125;207;255m'  GOLD=$'\033[38;2;224;175;104m'
             make_gradient 158 206 106  125 207 255 ;;
@@ -413,16 +456,33 @@ set_theme() {
         "Solarized")
             LIME=$'\033[38;2;133;153;0m'     TEAL=$'\033[38;2;42;161;152m'   GOLD=$'\033[38;2;181;137;0m'
             make_gradient 133 153 0  42 161 152 ;;
+        *)
+            for _cti in "${!_CT_NAMES[@]}"; do
+                if [ "${_CT_NAMES[$_cti]}" = "$1" ]; then
+                    local _lr _lg _lb _tr _tg _tb _gr _gg _gb
+                    IFS=',' read -r _lr _lg _lb <<< "${_CT_LIME[$_cti]}"
+                    IFS=',' read -r _tr _tg _tb <<< "${_CT_TEAL[$_cti]}"
+                    IFS=',' read -r _gr _gg _gb <<< "${_CT_GOLD[$_cti]}"
+                    LIME=$'\033[38;2;'"${_lr};${_lg};${_lb}m"
+                    TEAL=$'\033[38;2;'"${_tr};${_tg};${_tb}m"
+                    GOLD=$'\033[38;2;'"${_gr};${_gg};${_gb}m"
+                    make_gradient "$_lr" "$_lg" "$_lb" "$_tr" "$_tg" "$_tb"
+                    break
+                fi
+            done
+            ;;
     esac
 }
 
-# Available themes list
-THEMES=("Abaris" "Tokyo Night" "Monokai Pro" "GitHub Dark" "Rider Dark" "Dracula" "One Dark" "Catppuccin" "Nord" "Gruvbox" "Solarized")
+# Available themes list (custom themes first, then built-ins)
+THEMES=()
+for _ctn in "${_CT_NAMES[@]}"; do THEMES+=("$_ctn"); done
+THEMES+=("Tokyo Night" "Monokai Pro" "GitHub Dark" "Rider Dark" "Dracula" "One Dark" "Catppuccin" "Nord" "Gruvbox" "Solarized")
 
-# ─── Settings file (~/.abaris/.config) ───────────────────────────────────────
+# ─── Settings file ────────────────────────────────────────────────────────────
 # Simple TOML-like key = "value" store, human-editable
 
-ABARIS_CONFIG="$HOME/.abaris/.config"
+ABARIS_CONFIG="$HOME/$KT_CONFIG_DIR/.config"
 
 # Read a value from config. Returns empty string if key not found.
 # Usage: val=$(config_read "theme")
@@ -442,7 +502,7 @@ config_write() {
     local key="$1" value="$2"
     mkdir -p "$(dirname "$ABARIS_CONFIG")"
     if [ ! -f "$ABARIS_CONFIG" ]; then
-        printf '# Abaris AI Kit settings\n' > "$ABARIS_CONFIG"
+        printf '# %s settings\n' "$KT_NAME" > "$ABARIS_CONFIG"
     fi
     if grep -qE "^${key} *= *" "$ABARIS_CONFIG" 2>/dev/null; then
         # Update existing key (portable sed -i)
@@ -453,12 +513,12 @@ config_write() {
     fi
 }
 
-# Initialize theme from config (or default to Abaris)
+# Initialize theme from config (or default to kit default)
 _saved_theme=$(config_read "theme")
 if [ -n "$_saved_theme" ]; then
     set_theme "$_saved_theme"
 else
-    set_theme "Abaris"
+    set_theme "$KT_DEFAULT_THEME"
 fi
 unset _saved_theme
 
@@ -512,12 +572,17 @@ init_env_line() {
 
 show_logo() {
     echo ""
-    echo "${G1}${BOLD}    █████╗  ██████╗  █████╗  ██████╗  ██╗ ███████╗${RESET}"
-    echo "${G1}${BOLD}   ██╔══██╗ ██╔══██╗ ██╔══██╗ ██╔══██╗ ██║ ██╔════╝${RESET}"
-    echo "${G2}${BOLD}   ███████║ ██████╔╝ ███████║ ██████╔╝ ██║ ███████╗${RESET}"
-    echo "${G3}${BOLD}   ██╔══██║ ██╔══██╗ ██╔══██║ ██╔══██╗ ██║ ╚════██║${RESET}"
-    echo "${G4}${BOLD}   ██║  ██║ ██████╔╝ ██║  ██║ ██║  ██║ ██║ ███████║${RESET}"
-    echo "${G5}${BOLD}   ╚═╝  ╚═╝ ╚═════╝  ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚═╝ ╚══════╝${RESET}"
+    if [ -n "$KT_ASCII_ART_FILE" ] && [ -f "$KIT_DIR/$KT_ASCII_ART_FILE" ]; then
+        local _i=0
+        while IFS= read -r _line || [ -n "$_line" ]; do
+            local _ci=$((_i % 8 + 1))
+            local _color="G${_ci}"
+            printf '%s%s%s%s\n' "${!_color}" "$BOLD" "  $_line" "$RESET"
+            _i=$((_i + 1))
+        done < "$KIT_DIR/$KT_ASCII_ART_FILE"
+    else
+        echo "${G1}${BOLD}   ${KT_SHORT_NAME}${RESET}"
+    fi
     echo ""
     echo "${G6}${BOLD}   ─── A I   K I T ───${RESET}  ${DIM}v${KIT_VERSION}${RESET}"
     echo ""
@@ -636,26 +701,6 @@ fi
 
 # ─── Init version and env ─────────────────────────────────────────────────────
 
-# ─── Auto-update kit from remote ──────────────────────────────────────────────
-
-if [ -d "$KIT_DIR/.git" ]; then
-    git -C "$KIT_DIR" fetch --quiet 2>/dev/null
-    # Only update if remote has commits we don't have (behind count > 0)
-    _behind=$(git -C "$KIT_DIR" rev-list --count HEAD..@{upstream} 2>/dev/null || echo "0")
-    if [ "$_behind" -gt 0 ] 2>/dev/null; then
-        echo "  ${TEAL}↻${RESET} Newer version available, updating..."
-        pull_ok=0
-        git -C "$KIT_DIR" pull --ff-only --quiet 2>/dev/null || pull_ok=$?
-        if [ $pull_ok -eq 0 ]; then
-            echo "  ${GREEN}✓${RESET} Kit updated to latest version"
-        else
-            echo "  ${WARN}!${RESET} ${DIM}Auto-update failed — try: cd $KIT_DIR && git pull${RESET}"
-        fi
-        echo ""
-    fi
-    unset _behind
-fi
-
 KIT_VERSION="$(cat "$KIT_DIR/VERSION" 2>/dev/null || echo "unknown")"
 init_env_line
 show_logo
@@ -698,14 +743,14 @@ if [ "$MODE" = "check" ]; then
     echo ""
 
     # Detect target directory
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        CHECK_DIR="$HOME/.abaris"
-        echo "  ${DIM}Checking global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        CHECK_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Checking global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         CHECK_DIR="$(pwd)"
         echo "  ${DIM}Checking project install at $(pwd)/${RESET}"
     else
-        echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+        echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
         echo "  ${DIM}Run: bash install.sh${RESET}"
         exit 1
     fi
@@ -764,14 +809,14 @@ fi
 
 if [ "$MODE" = "list" ]; then
     # Detect install location
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        LIST_DIR="$HOME/.abaris"
-        echo "  ${DIM}Global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        LIST_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         LIST_DIR="$(pwd)"
         echo "  ${DIM}Project install at $(pwd)/${RESET}"
     else
-        echo "  No Abaris AI Kit installation found."
+        echo "  No ${KT_NAME} installation found."
         exit 1
     fi
     echo ""
@@ -827,25 +872,25 @@ if [ "$MODE" = "uninstall" ]; then
     echo ""
 
     # Detect where the kit is installed
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        UNINST_DIR="$HOME/.abaris"
-        echo "  ${DIM}Found global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        UNINST_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Found global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         UNINST_DIR="$(pwd)"
         echo "  ${DIM}Found project install at $(pwd)/${RESET}"
     else
-        echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+        echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
         exit 1
     fi
     echo ""
 
     removed=0
 
-    # Helper: safely remove a file, restoring .before-abaris backup if it exists
+    # Helper: safely remove a file, restoring .before-${KT_WATERMARK} backup if it exists
     safe_remove() {
         local file="$1"
         local label="$2"
-        local bak="${file}.before-abaris"
+        local bak="${file}.before-${KT_WATERMARK}"
 
         if [ ! -f "$file" ] && [ ! -L "$file" ]; then return; fi
 
@@ -887,12 +932,12 @@ if [ "$MODE" = "uninstall" ]; then
     done
 
     # Remove global symlinks if this was a global install
-    if [ "$UNINST_DIR" = "$HOME/.abaris" ]; then
+    if [ "$UNINST_DIR" = "$HOME/$KT_CONFIG_DIR" ]; then
         # Claude Code symlinks
         for f in "$HOME/.claude/CLAUDE.md" "$HOME/.claude/rules/"*.md "$HOME/.claude/skills/"*/SKILL.md; do
             if [ -L "$f" ]; then
                 link_target=$(readlink "$f")
-                if echo "$link_target" | grep -q '\.abaris' 2>/dev/null; then
+                if echo "$link_target" | grep -q "$KT_CONFIG_DIR" 2>/dev/null; then
                     rm "$f"
                     echo "  ${RED}✗${RESET} $(echo "$f" | sed "s|$HOME|~|") ${DIM}(symlink removed)${RESET}"
                     removed=$((removed + 1))
@@ -904,9 +949,9 @@ if [ "$MODE" = "uninstall" ]; then
                  "$HOME/.codeium/windsurf/memories/global_rules.md"; do
             if [ -L "$f" ]; then
                 link_target=$(readlink "$f")
-                if echo "$link_target" | grep -q '\.abaris' 2>/dev/null; then
+                if echo "$link_target" | grep -q "$KT_CONFIG_DIR" 2>/dev/null; then
                     # Restore backup if exists
-                    bak="${f}.before-abaris"
+                    bak="${f}.before-${KT_WATERMARK}"
                     if [ -f "$bak" ]; then
                         mv "$bak" "$f"
                         echo "  ${GREEN}↩${RESET} $(echo "$f" | sed "s|$HOME|~|") ${DIM}(restored original)${RESET}"
@@ -925,9 +970,9 @@ if [ "$MODE" = "uninstall" ]; then
     echo ""
     echo "  ${BOLD}${LIME}✓ Uninstalled ${removed} file(s)${RESET}"
     echo ""
-    if [ "$UNINST_DIR" = "$HOME/.abaris" ]; then
-        echo "  ${DIM}The ~/.abaris/ directory was left in place.${RESET}"
-        echo "  ${DIM}Remove it manually if you want: rm -rf ~/.abaris${RESET}"
+    if [ "$UNINST_DIR" = "$HOME/$KT_CONFIG_DIR" ]; then
+        echo "  ${DIM}The ~/$KT_CONFIG_DIR/ directory was left in place.${RESET}"
+        echo "  ${DIM}Remove it manually if you want: rm -rf ~/$KT_CONFIG_DIR${RESET}"
     fi
     echo ""
     bar
@@ -960,7 +1005,7 @@ do_cp() {
     # Back up existing file if it differs from source
     if [ -f "$dst" ]; then
         if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
-            local bak="${dst}.before-abaris"
+            local bak="${dst}.before-${KT_WATERMARK}"
             if [ ! -f "$bak" ]; then
                 cp "$dst" "$bak"
                 echo "  ${DIM}backed up: $(basename "$dst") → $(basename "$bak")${RESET}"
@@ -1498,7 +1543,7 @@ checkbox_select() {
 }
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-#  Team config auto-detection (.abaris-config)
+#  Team config auto-detection (.${KT_WATERMARK}-config)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 # Parse a TOML array: items = ["a", "b", "c"] → one item per line
@@ -1653,12 +1698,18 @@ _load_profile_toml() {
     for s in "${_s_arr[@]}"; do
         s="$(echo "$s" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
         [ -z "$s" ] && continue
-        case "$s" in
-            react)        PROFILE_STACKS+=("React / Next.js / React Native / Expo") ;;
-            dotnet)       PROFILE_STACKS+=(".NET / C#") ;;
-            integrations) PROFILE_STACKS+=("Integrations (Bitbucket, Azure DevOps, Jira)") ;;
-            *)            PROFILE_STACKS+=("$s") ;;
-        esac
+        # Look up display name from _STACK_NAMES
+        local _matched=false
+        for _si in "${!_STACK_KEYS[@]}"; do
+            if [ "${_STACK_KEYS[$_si]}" = "$s" ]; then
+                PROFILE_STACKS+=("${_STACK_NAMES[$_si]}")
+                _matched=true
+                break
+            fi
+        done
+        if [ "$_matched" = false ]; then
+            PROFILE_STACKS+=("$s")
+        fi
     done
 
     # Parse rules, skills, plugins arrays
@@ -1675,9 +1726,9 @@ USE_TEAM_CONFIG=false
 HAS_TEAM_CONFIG=false
 
 # Pre-parse team config if present (shown as option in start menu)
-if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ] && [ -f "$(pwd)/.abaris-config" ]; then
+if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ] && [ -f "$(pwd)/.${KT_WATERMARK}-config" ]; then
     HAS_TEAM_CONFIG=true
-    _tc_file="$(pwd)/.abaris-config"
+    _tc_file="$(pwd)/.${KT_WATERMARK}-config"
     _tc_stacks=()
     while IFS= read -r s; do _tc_stacks+=("$s"); done < <(_parse_toml_array "$_tc_file" "stacks")
     _tc_rules=()
@@ -1692,25 +1743,39 @@ fi
 _apply_team_config() {
     TARGET_DIR="$(pwd)"
     INSTALL_GLOBAL=false
-    HAS_REACT=false; HAS_DOTNET=false; HAS_INTEGRATIONS=false
+    # Activate stacks from team config
     for s in "${_tc_stacks[@]}"; do
-        case "$s" in
-            React*) HAS_REACT=true ;;
-            .NET*|dotnet*) HAS_DOTNET=true ;;
-            Integrations*) HAS_INTEGRATIONS=true ;;
-        esac
+        for _si in "${!_STACK_NAMES[@]}"; do
+            if [[ "${_STACK_NAMES[$_si]}" == "$s"* ]] || [[ "$s" == "${_STACK_KEYS[$_si]}"* ]]; then
+                _STACK_ACTIVE[$_si]=true
+            fi
+        done
     done
+    _sync_legacy_stacks
     CHOSEN_RULES=("${_tc_rules[@]}")
     CHOSEN_RULE_NAMES=()
     CHOSEN_RULE_SOURCES=()
     for r in "${_tc_rules[@]}"; do
         CHOSEN_RULE_NAMES+=("$r")
-        for cat in shared react dotnet integrations; do
-            if [ -f "$KIT_DIR/rules/$cat/$r.md" ]; then
-                CHOSEN_RULE_SOURCES+=("$cat")
+        for _sk in "${_STACK_KEYS[@]}"; do
+            local _rd
+            local _si=$(_stack_index "$_sk")
+            _rd="${_STACK_RULES_DIRS[$_si]}"
+            [ -z "$_rd" ] && _rd="$_sk"
+            if [ -f "$KIT_DIR/rules/$_rd/$r.md" ]; then
+                CHOSEN_RULE_SOURCES+=("$_rd")
                 break
             fi
         done
+        # Also check shared and custom
+        if [ ${#CHOSEN_RULE_SOURCES[@]} -lt ${#CHOSEN_RULE_NAMES[@]} ]; then
+            for cat in shared custom; do
+                if [ -f "$KIT_DIR/rules/$cat/$r.md" ]; then
+                    CHOSEN_RULE_SOURCES+=("$cat")
+                    break
+                fi
+            done
+        fi
     done
     CHOSEN_SKILLS=("${_tc_skills[@]}")
     CHOSEN_PLUGINS=("${_tc_plugins[@]}")
@@ -1730,14 +1795,14 @@ if [ "$FLAG_ACTION" = false ] && [ "${SKIP_MENU:-false}" != true ]; then
 
         # Show team config banner if detected
         if [ "$HAS_TEAM_CONFIG" = true ]; then
-            echo "  ${LIME}${BOLD}▸ Team config found${RESET}  ${DIM}(.abaris-config)${RESET}"
+            echo "  ${LIME}${BOLD}▸ Team config found${RESET}  ${DIM}(.${KT_WATERMARK}-config)${RESET}"
             echo "    ${DIM}${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins${RESET}"
             echo ""
         fi
 
         if [ "$HAS_TEAM_CONFIG" = true ]; then
             single_select "Select an action:" \
-                "★ Install from team config" "— Apply .abaris-config (${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins)" \
+                "★ Install from team config" "— Apply .${KT_WATERMARK}-config (${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins)" \
                 "Install (customize)" "— Use team config as defaults, then tweak" \
                 "Install (fresh)" "— Ignore config, pick everything yourself" \
                 "Manage" "— View, add, remove, update, or check installed items" \
@@ -1787,20 +1852,20 @@ fi
 if [ "$MODE" = "uninstall" ] && [ "$FLAG_ACTION" = false ]; then
     echo "  ${BOLD}${WHITE}Uninstalling...${RESET}"
     echo ""
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        UNINST_DIR="$HOME/.abaris"
-        echo "  ${DIM}Found global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        UNINST_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Found global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         UNINST_DIR="$(pwd)"
         echo "  ${DIM}Found project install at $(pwd)/${RESET}"
     else
-        echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+        echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
         exit 1
     fi
     echo ""
     removed=0
     safe_remove() {
-        local file="$1" label="$2" bak="${1}.before-abaris"
+        local file="$1" label="$2" bak="${1}.before-${KT_WATERMARK}"
         if [ ! -f "$file" ] && [ ! -L "$file" ]; then return; fi
         if [ -f "$bak" ]; then
             mv "$bak" "$file"
@@ -1858,14 +1923,14 @@ if [ "$MODE" = "manage" ]; then
   while [ "$MANAGE_LOOP" = true ]; do
     step_header "Manage" 1
     # Detect install location
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        MANAGE_DIR="$HOME/.abaris"
-        echo "  ${DIM}Global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        MANAGE_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         MANAGE_DIR="$(pwd)"
         echo "  ${DIM}Project install at $(pwd)/${RESET}"
     else
-        echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+        echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
         echo "  ${DIM}Run install first.${RESET}"
         exit 1
     fi
@@ -2042,7 +2107,7 @@ if [ "$MODE" = "manage" ]; then
                     for i in "${!rm_items[@]}"; do
                         if [ "${rm_items[$i]}" = "$item" ]; then
                             path="${rm_paths[$i]}"
-                            bak="${path}.before-abaris"
+                            bak="${path}.before-${KT_WATERMARK}"
                             if [ -f "$bak" ]; then
                                 mv "$bak" "$path"
                                 echo "  ${GREEN}↩${RESET} $(basename "$path") ${DIM}(restored original)${RESET}"
@@ -2072,14 +2137,14 @@ if [ "$MODE" = "manage" ]; then
             echo ""
             echo "  ${BOLD}${WHITE}Checking sync status...${RESET}"
             echo ""
-            if [ -d "$HOME/.abaris/.claude" ]; then
-                CHECK_DIR="$HOME/.abaris"
-                echo "  ${DIM}Checking global install at ~/.abaris/${RESET}"
+            if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+                CHECK_DIR="$HOME/$KT_CONFIG_DIR"
+                echo "  ${DIM}Checking global install at ~/$KT_CONFIG_DIR/${RESET}"
             elif [ -d "$(pwd)/.claude/rules" ]; then
                 CHECK_DIR="$(pwd)"
                 echo "  ${DIM}Checking project install at $(pwd)/${RESET}"
             else
-                echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+                echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
                 exit 1
             fi
             echo ""
@@ -2162,14 +2227,14 @@ if [ "$MODE" = "update" ]; then
     echo ""
 
     # Detect where the kit is installed
-    if [ -d "$HOME/.abaris/.claude" ]; then
-        UPDATE_DIR="$HOME/.abaris"
-        echo "  ${DIM}Found global install at ~/.abaris/${RESET}"
+    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+        UPDATE_DIR="$HOME/$KT_CONFIG_DIR"
+        echo "  ${DIM}Found global install at ~/$KT_CONFIG_DIR/${RESET}"
     elif [ -d "$(pwd)/.claude/rules" ]; then
         UPDATE_DIR="$(pwd)"
         echo "  ${DIM}Found project install at $(pwd)/${RESET}"
     else
-        echo "  ${RED}✗${RESET} No Abaris AI Kit installation found."
+        echo "  ${RED}✗${RESET} No ${KT_NAME} installation found."
         echo "  ${DIM}Run: bash install.sh${RESET}"
         exit 1
     fi
@@ -2183,7 +2248,7 @@ if [ "$MODE" = "update" ]; then
         local dst="$2"
         local label="$3"
         if [ -f "$dst" ] && ! diff -q "$src" "$dst" >/dev/null 2>&1; then
-            local bak="${dst}.before-abaris"
+            local bak="${dst}.before-${KT_WATERMARK}"
             if [ ! -f "$bak" ]; then
                 cp "$dst" "$bak"
                 echo "  ${DIM}backed up: $(basename "$dst") → $(basename "$bak")${RESET}"
@@ -2328,10 +2393,21 @@ apply_profile() {
 
     # Special: Everything — select all discovered items
     if [ "$1" = "★ Everything" ] || [ "$1" = "Everything" ]; then
-        PROFILE_STACKS=("React / Next.js / React Native / Expo" ".NET / C#" "Integrations (Bitbucket, Azure DevOps, Jira)")
+        PROFILE_STACKS=()
+        for _sn in "${_STACK_NAMES[@]}"; do PROFILE_STACKS+=("$_sn"); done
         # Rules: all .md files from all categories
         PROFILE_RULES=()
-        for _cat in shared react dotnet integrations custom; do
+        # Scan stack-specific rule dirs
+        for _si in "${!_STACK_KEYS[@]}"; do
+            local _rd="${_STACK_RULES_DIRS[$_si]}"
+            [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+            for _f in "$KIT_DIR/rules/$_rd"/*.md; do
+                [ -f "$_f" ] || continue
+                PROFILE_RULES+=("$(basename "$_f" .md)")
+            done
+        done
+        # Also scan shared and custom
+        for _cat in shared custom; do
             for _f in "$KIT_DIR/rules/$_cat"/*.md; do
                 [ -f "$_f" ] || continue
                 PROFILE_RULES+=("$(basename "$_f" .md)")
@@ -2377,14 +2453,15 @@ apply_profile() {
 
 # Apply profile selections directly (skip individual steps)
 apply_profile_selections() {
-    HAS_REACT=false; HAS_DOTNET=false; HAS_INTEGRATIONS=false
+    # Activate stacks from profile
     for _ps in "${PROFILE_STACKS[@]}"; do
-        case "$_ps" in
-            "React"*) HAS_REACT=true ;;
-            ".NET"*) HAS_DOTNET=true ;;
-            "Integrations"*) HAS_INTEGRATIONS=true ;;
-        esac
+        for _si in "${!_STACK_NAMES[@]}"; do
+            if [ "${_STACK_NAMES[$_si]}" = "$_ps" ]; then
+                _STACK_ACTIVE[$_si]=true
+            fi
+        done
     done
+    _sync_legacy_stacks
     unset _ps
 
     # Build CHOSEN_RULES with source info
@@ -2393,15 +2470,28 @@ apply_profile_selections() {
     CHOSEN_RULE_SOURCES=()
     for _r in "${PROFILE_RULES[@]}"; do
         CHOSEN_RULE_NAMES+=("$_r")
-        # Find the source category
-        for _cat in shared react dotnet integrations custom; do
-            if [ -f "$KIT_DIR/rules/$_cat/$_r.md" ]; then
-                CHOSEN_RULE_SOURCES+=("$_cat")
+        # Find the source category — check all stack rules_dirs + shared + custom
+        local _found=false
+        for _si in "${!_STACK_KEYS[@]}"; do
+            local _rd="${_STACK_RULES_DIRS[$_si]}"
+            [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+            if [ -f "$KIT_DIR/rules/$_rd/$_r.md" ]; then
+                CHOSEN_RULE_SOURCES+=("$_rd")
+                _found=true
                 break
             fi
         done
+        if [ "$_found" = false ]; then
+            for _cat in shared custom; do
+                if [ -f "$KIT_DIR/rules/$_cat/$_r.md" ]; then
+                    CHOSEN_RULE_SOURCES+=("$_cat")
+                    _found=true
+                    break
+                fi
+            done
+        fi
     done
-    unset _r _cat
+    unset _r _cat _found
 
     CHOSEN_SKILLS=("${PROFILE_SKILLS[@]}")
     CHOSEN_PLUGINS=("${PROFILE_PLUGINS[@]}")
@@ -2429,7 +2519,7 @@ while [ "$FLOW" -le 7 ]; do
             step_header "Install Location" 2
 
             single_select "Where do you want to install?" \
-                "Global  → ~/.abaris/" "Shared across all projects. Symlink to AI tools." \
+                "Global  → ~/$KT_CONFIG_DIR/" "Shared across all projects. Symlink to AI tools." \
                 "Project → $(pwd)/" "Install into this project only."
 
             if [ "$SELECTED_ITEM" = "__BACK__" ]; then
@@ -2440,7 +2530,7 @@ while [ "$FLOW" -le 7 ]; do
             INSTALL_GLOBAL=false
             if [ "$SELECTED_INDEX" = 0 ]; then
                 INSTALL_GLOBAL=true
-                TARGET_DIR="$HOME/.abaris"
+                TARGET_DIR="$HOME/$KT_CONFIG_DIR"
             else
                 TARGET_DIR="$(pwd)"
             fi
@@ -2472,18 +2562,28 @@ while [ "$FLOW" -le 7 ]; do
 
                 if [ "$PROFILE_NAME" != "Custom" ]; then
                     # Show all stacks so all rules are visible (profile defaults handle pre-selection)
-                    HAS_REACT=true; HAS_DOTNET=true; HAS_INTEGRATIONS=true
+                    _activate_all_stacks
+                    _sync_legacy_stacks
                 fi
                 FLOW=2
             else
-                # Project install: auto-detect stack, skip tools/stack steps
-                HAS_REACT=false; HAS_DOTNET=false; HAS_INTEGRATIONS=true
-                if [ -f "$TARGET_DIR/package.json" ] || [ -f "$TARGET_DIR/tsconfig.json" ]; then
-                    HAS_REACT=true
-                fi
-                if compgen -G "$TARGET_DIR/*.csproj" >/dev/null 2>&1 || compgen -G "$TARGET_DIR/*.sln" >/dev/null 2>&1; then
-                    HAS_DOTNET=true
-                fi
+                # Project install: auto-detect stacks from _STACK_DETECT patterns
+                for _si in "${!_STACK_KEYS[@]}"; do
+                    _STACK_ACTIVE[$_si]=false
+                    local _detect="${_STACK_DETECT[$_si]}"
+                    if [ -z "$_detect" ]; then
+                        _STACK_ACTIVE[$_si]=true  # no detect = always active
+                        continue
+                    fi
+                    IFS=',' read -ra _patterns <<< "$_detect"
+                    for _pat in "${_patterns[@]}"; do
+                        if compgen -G "$TARGET_DIR/$_pat" >/dev/null 2>&1; then
+                            _STACK_ACTIVE[$_si]=true
+                            break
+                        fi
+                    done
+                done
+                _sync_legacy_stacks
 
                 # ─── Profile selection (project) ──────────────
                 while true; do
@@ -2510,7 +2610,8 @@ while [ "$FLOW" -le 7 ]; do
                 apply_profile "$SELECTED_ITEM"
 
                 if [ "$PROFILE_NAME" != "Custom" ]; then
-                    HAS_REACT=true; HAS_DOTNET=true; HAS_INTEGRATIONS=true
+                    _activate_all_stacks
+                    _sync_legacy_stacks
                 fi
                 FLOW=4
             fi
@@ -2521,10 +2622,10 @@ while [ "$FLOW" -le 7 ]; do
 
             if [ "$IS_WINDOWS" = true ]; then
                 echo "  The following tools can be set up with copies"
-                echo "  from their config location to ${TEAL}~/.abaris/${RESET}:"
+                echo "  from their config location to ${TEAL}~/$KT_CONFIG_DIR/${RESET}:"
             else
                 echo "  The following tools support automatic global symlinks"
-                echo "  from their config location to ${TEAL}~/.abaris/${RESET}:"
+                echo "  from their config location to ${TEAL}~/$KT_CONFIG_DIR/${RESET}:"
             fi
             echo ""
             echo "  ${TEAL}┌──────────────────┬─────────────────────────────────────┐${RESET}"
@@ -2540,7 +2641,7 @@ while [ "$FLOW" -le 7 ]; do
             echo "  ${DIM}These tools do NOT support global filesystem config:${RESET}"
             echo "  ${DIM}Cursor (UI settings only), Copilot (VS Code setting),${RESET}"
             echo "  ${DIM}Aider (--read flag), Amazon Q (CLI context), Cline (extension settings)${RESET}"
-            echo "  ${DIM}→ For these, copy files from ~/.abaris/ into each project manually.${RESET}"
+            echo "  ${DIM}→ For these, copy files from ~/$KT_CONFIG_DIR/ into each project manually.${RESET}"
             echo ""
 
             checkbox_select "Which tools should we set up symlinks for?" \
@@ -2567,14 +2668,18 @@ while [ "$FLOW" -le 7 ]; do
             fi
             echo ""
 
-            CB_TOKENS=("$(count_category_tokens react)" "$(count_category_tokens dotnet)" "$(count_category_tokens integrations)")
-            CB_INSTALLED=(0 0 0)
-            CB_HEAVY=(0 0 0)
-
-            _stack_cb=("Select your stacks:"
-                "React / Next.js / React Native / Expo"
-                ".NET / C#"
-                "Integrations (Bitbucket, Azure DevOps, Jira)")
+            CB_TOKENS=()
+            CB_INSTALLED=()
+            CB_HEAVY=()
+            _stack_cb=("Select your stacks:")
+            for _si in "${!_STACK_KEYS[@]}"; do
+                local _rd="${_STACK_RULES_DIRS[$_si]}"
+                [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+                CB_TOKENS+=("$(count_category_tokens "$_rd")")
+                CB_INSTALLED+=(0)
+                CB_HEAVY+=(0)
+                _stack_cb+=("${_STACK_NAMES[$_si]}")
+            done
             if [ ${#PROFILE_STACKS[@]} -gt 0 ]; then
                 _stack_cb+=("--" "${PROFILE_STACKS[@]}")
             fi
@@ -2587,14 +2692,16 @@ while [ "$FLOW" -le 7 ]; do
                 FLOW=2; continue
             fi
 
-            HAS_REACT=false; HAS_DOTNET=false; HAS_INTEGRATIONS=false
+            # Deactivate all stacks, then activate selected ones
+            for _si in "${!_STACK_ACTIVE[@]}"; do _STACK_ACTIVE[$_si]=false; done
             for item in "${SELECTED[@]}"; do
-                case "$item" in
-                    "React"*) HAS_REACT=true ;;
-                    ".NET"*) HAS_DOTNET=true ;;
-                    "Integrations"*) HAS_INTEGRATIONS=true ;;
-                esac
+                for _si in "${!_STACK_NAMES[@]}"; do
+                    if [ "${_STACK_NAMES[$_si]}" = "$item" ]; then
+                        _STACK_ACTIVE[$_si]=true
+                    fi
+                done
             done
+            _sync_legacy_stacks
             FLOW=4
             ;;
 
@@ -2634,29 +2741,19 @@ while [ "$FLOW" -le 7 ]; do
                 done
             fi
 
-            # React rules — gated on HAS_REACT
-            if [ "$HAS_REACT" = true ] && compgen -G "$KIT_DIR/rules/react/*.md" >/dev/null 2>&1; then
-                echo "  ${LIME}React / TypeScript${RESET} ${DIM}(up to ~$(count_category_tokens react) tk)${RESET}"
-                for _rf in "$KIT_DIR/rules/react"/*.md; do
-                    _add_rule "$(basename "$_rf" .md)" "react"
-                done
-            fi
-
-            # .NET rules — gated on HAS_DOTNET
-            if [ "$HAS_DOTNET" = true ] && compgen -G "$KIT_DIR/rules/dotnet/*.md" >/dev/null 2>&1; then
-                echo "  ${LIME}.NET / C#${RESET} ${DIM}(up to ~$(count_category_tokens dotnet) tk)${RESET}"
-                for _rf in "$KIT_DIR/rules/dotnet"/*.md; do
-                    _add_rule "$(basename "$_rf" .md)" "dotnet"
-                done
-            fi
-
-            # Integration rules — gated on HAS_INTEGRATIONS
-            if [ "$HAS_INTEGRATIONS" = true ] && compgen -G "$KIT_DIR/rules/integrations/*.md" >/dev/null 2>&1; then
-                echo "  ${LIME}Integrations${RESET} ${DIM}(up to ~$(count_category_tokens integrations) tk)${RESET}"
-                for _rf in "$KIT_DIR/rules/integrations"/*.md; do
-                    _add_rule "$(basename "$_rf" .md)" "integrations"
-                done
-            fi
+            # Stack-specific rules — gated on _STACK_ACTIVE
+            for _si in "${!_STACK_KEYS[@]}"; do
+                if [ "${_STACK_ACTIVE[$_si]}" = true ]; then
+                    local _rd="${_STACK_RULES_DIRS[$_si]}"
+                    [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+                    if compgen -G "$KIT_DIR/rules/$_rd/*.md" >/dev/null 2>&1; then
+                        echo "  ${LIME}${_STACK_NAMES[$_si]}${RESET} ${DIM}(up to ~$(count_category_tokens "$_rd") tk)${RESET}"
+                        for _rf in "$KIT_DIR/rules/$_rd"/*.md; do
+                            _add_rule "$(basename "$_rf" .md)" "$_rd"
+                        done
+                    fi
+                fi
+            done
 
             # Custom rules (rules/custom/*.md — user-created, survives git pull)
             if [ -d "$KIT_DIR/rules/custom" ]; then
@@ -2835,22 +2932,19 @@ while [ "$FLOW" -le 7 ]; do
 
             _conf_total=$((_conf_rule_tk + _conf_plugin_tk))
 
-            # Build stack summary
+            # Build stack summary from active stacks
             _conf_stacks=""
-            if [ "$HAS_REACT" = true ]; then _conf_stacks="React"; fi
-            if [ "$HAS_DOTNET" = true ]; then
-                [ -n "$_conf_stacks" ] && _conf_stacks="${_conf_stacks}, "
-                _conf_stacks="${_conf_stacks}.NET"
-            fi
-            if [ "$HAS_INTEGRATIONS" = true ]; then
-                [ -n "$_conf_stacks" ] && _conf_stacks="${_conf_stacks}, "
-                _conf_stacks="${_conf_stacks}Integrations"
-            fi
+            for _si in "${!_STACK_KEYS[@]}"; do
+                if [ "${_STACK_ACTIVE[$_si]}" = true ]; then
+                    [ -n "$_conf_stacks" ] && _conf_stacks="${_conf_stacks}, "
+                    _conf_stacks="${_conf_stacks}${_STACK_NAMES[$_si]}"
+                fi
+            done
             [ -z "$_conf_stacks" ] && _conf_stacks="None"
 
             # Location label
             if [ "$INSTALL_GLOBAL" = true ]; then
-                _conf_loc="~/.abaris/ (global)"
+                _conf_loc="~/$KT_CONFIG_DIR/ (global)"
             else
                 _conf_loc="$(pwd)/ (project)"
             fi
@@ -2878,7 +2972,7 @@ while [ "$FLOW" -le 7 ]; do
             single_select "What would you like to do?" \
                 "Confirm & install" "— Apply selections now" \
                 "Go back and adjust" "— Return to previous steps" \
-                "Save as .abaris-config" "— Export selections to file"
+                "Save as .${KT_WATERMARK}-config" "— Export selections to file"
 
             if [ "$SELECTED_ITEM" = "__BACK__" ]; then
                 if [ "$USE_TEAM_CONFIG" = true ]; then
@@ -2908,11 +3002,11 @@ while [ "$FLOW" -le 7 ]; do
                     fi
                     FLOW=5; continue
                     ;;
-                "Save as .abaris-config")
+                "Save as .${KT_WATERMARK}-config")
                     # Write config file
-                    _cfg_file="$(pwd)/.abaris-config"
+                    _cfg_file="$(pwd)/.${KT_WATERMARK}-config"
                     {
-                        printf '# Abaris AI Kit project config\n'
+                        printf '# %s project config\n' "$KT_NAME"
                         printf '# Generated by install.sh v%s\n\n' "$KIT_VERSION"
                         printf '[stacks]\n'
                         printf 'items = ['
@@ -3038,8 +3132,8 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
         if [ -L "$dst" ]; then
             rm "$dst"
         elif [ -f "$dst" ]; then
-            mv "$dst" "${dst}.before-abaris"
-            echo "    ${DIM}(backed up existing ${dst} to ${dst}.before-abaris)${RESET}"
+            mv "$dst" "${dst}.before-${KT_WATERMARK}"
+            echo "    ${DIM}(backed up existing ${dst} to ${dst}.before-${KT_WATERMARK})${RESET}"
         fi
 
         if [ "$IS_WINDOWS" = true ]; then
@@ -3058,7 +3152,7 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
             "Claude Code")
                 echo "  ${BOLD}${WHITE}Claude Code:${RESET}"
                 safe_link "$TARGET_DIR/AGENT.md" "$HOME/.claude/CLAUDE.md"
-                echo "    ${GREEN}✓${RESET} ~/.claude/CLAUDE.md → ~/.abaris/AGENT.md"
+                echo "    ${GREEN}✓${RESET} ~/.claude/CLAUDE.md → ~/$KT_CONFIG_DIR/AGENT.md"
 
                 for rule in "$TARGET_DIR/.claude/rules/"*.md; do
                     if [ -f "$rule" ]; then
@@ -3066,7 +3160,7 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
                         safe_link "$rule" "$HOME/.claude/rules/$name"
                     fi
                 done
-                echo "    ${GREEN}✓${RESET} ~/.claude/rules/ → ~/.abaris/.claude/rules/"
+                echo "    ${GREEN}✓${RESET} ~/.claude/rules/ → ~/$KT_CONFIG_DIR/.claude/rules/"
 
                 for skill_dir in "$TARGET_DIR/.claude/skills/"*/; do
                     if [ -d "$skill_dir" ]; then
@@ -3075,28 +3169,28 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
                         safe_link "$skill_dir/SKILL.md" "$HOME/.claude/skills/$name/SKILL.md"
                     fi
                 done
-                echo "    ${GREEN}✓${RESET} ~/.claude/skills/ → ~/.abaris/.claude/skills/"
+                echo "    ${GREEN}✓${RESET} ~/.claude/skills/ → ~/$KT_CONFIG_DIR/.claude/skills/"
                 echo ""
                 ;;
 
             "Gemini CLI")
                 echo "  ${BOLD}${WHITE}Gemini CLI:${RESET}"
                 safe_link "$TARGET_DIR/AGENT.md" "$HOME/.gemini/GEMINI.md"
-                echo "    ${GREEN}✓${RESET} ~/.gemini/GEMINI.md → ~/.abaris/AGENT.md"
+                echo "    ${GREEN}✓${RESET} ~/.gemini/GEMINI.md → ~/$KT_CONFIG_DIR/AGENT.md"
                 echo ""
                 ;;
 
             "Codex CLI")
                 echo "  ${BOLD}${WHITE}Codex CLI:${RESET}"
                 safe_link "$TARGET_DIR/AGENT.md" "$HOME/.codex/AGENTS.md"
-                echo "    ${GREEN}✓${RESET} ~/.codex/AGENTS.md → ~/.abaris/AGENT.md"
+                echo "    ${GREEN}✓${RESET} ~/.codex/AGENTS.md → ~/$KT_CONFIG_DIR/AGENT.md"
                 echo ""
                 ;;
 
             "Windsurf")
                 echo "  ${BOLD}${WHITE}Windsurf:${RESET}"
                 safe_link "$TARGET_DIR/AGENT.md" "$HOME/.codeium/windsurf/memories/global_rules.md"
-                echo "    ${GREEN}✓${RESET} ~/.codeium/windsurf/memories/global_rules.md → ~/.abaris/AGENT.md"
+                echo "    ${GREEN}✓${RESET} ~/.codeium/windsurf/memories/global_rules.md → ~/$KT_CONFIG_DIR/AGENT.md"
                 echo ""
                 ;;
 
@@ -3108,7 +3202,7 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
                         safe_link "$rule" "$HOME/.continue/rules/$name"
                     fi
                 done
-                echo "    ${GREEN}✓${RESET} ~/.continue/rules/ → ~/.abaris/.claude/rules/"
+                echo "    ${GREEN}✓${RESET} ~/.continue/rules/ → ~/$KT_CONFIG_DIR/.claude/rules/"
                 echo ""
                 ;;
         esac
@@ -3151,12 +3245,12 @@ ELAPSED=$(( $(date +%s) - START_TIME ))
 if [ "$DRY_RUN" = true ]; then
     echo "  ${BOLD}${LIME}✓ Dry run complete${RESET}"
 else
-    echo "  ${BOLD}${LIME}✓ Abaris AI Kit installed!${RESET}"
+    echo "  ${BOLD}${LIME}✓ ${KT_NAME} installed!${RESET}"
 fi
 echo ""
 
 if [ "$INSTALL_GLOBAL" = true ]; then
-    _s_loc="~/.abaris/ (global)"
+    _s_loc="~/$KT_CONFIG_DIR/ (global)"
 else
     _s_loc="$TARGET_DIR/.claude/"
 fi
@@ -3208,14 +3302,14 @@ echo "  ${BOLD}${WHITE}Next steps:${RESET}"
 echo "    ${TEAL}→${RESET} Review AGENT.md and add project-specific context"
 if [ "$INSTALL_GLOBAL" = false ]; then
     echo "    ${TEAL}→${RESET} Commit .claude/ to share rules with your team"
-    if [ ! -f "$(pwd)/.abaris-config" ]; then
-        echo "    ${TEAL}→${RESET} Run installer again to export an ${BOLD}.abaris-config${RESET} for teammates"
+    if [ ! -f "$(pwd)/.${KT_WATERMARK}-config" ]; then
+        echo "    ${TEAL}→${RESET} Run installer again to export an ${BOLD}.${KT_WATERMARK}-config${RESET} for teammates"
     fi
 fi
 if [ "$INSTALL_GLOBAL" = true ]; then
     echo ""
     echo "  ${DIM}For tools without symlink support (Cursor, Copilot, Aider,${RESET}"
-    echo "  ${DIM}Amazon Q, Cline), copy files from ~/.abaris/ into each${RESET}"
+    echo "  ${DIM}Amazon Q, Cline), copy files from ~/$KT_CONFIG_DIR/ into each${RESET}"
     echo "  ${DIM}project, or use a project install.${RESET}"
 fi
 echo ""
