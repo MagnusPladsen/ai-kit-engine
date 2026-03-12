@@ -1,0 +1,30 @@
+# registry.toml — Plugin & MCP server metadata
+# Adding a new plugin or MCP? Just add a section here. No script edits needed.
+
+[plugins.coderabbit]
+
+[plugins.commit-commands]
+tokens = 500
+
+[plugins.superpowers]
+tokens = 1500
+heavy = true
+
+[plugins.ui-ux-pro-max]
+tokens = 2800
+heavy = true
+
+[plugins.typescript-lsp]
+stack = "react"
+
+[plugins.csharp-lsp]
+stack = "dotnet"
+
+[mcps.context7]
+url = "npx:-y:@upstash/context7-mcp"
+
+[mcps.atlassian]
+url = "https://mcp.atlassian.com/v1/mcp"
+
+[mcps.figma]
+url = "https://mcp.figma.com/mcp"

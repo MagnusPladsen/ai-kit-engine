@@ -1,0 +1,74 @@
+# kit.toml — Reference configuration for AI Kit Engine
+# Copy this to your content repo and customize.
+
+[branding]
+name = "AI Kit"
+short_name = "AI-KIT"
+tagline = "AI rules, skills, and plugins for your projects"
+watermark = "ai-kit"
+config_dir = ".ai-kit"
+ascii_art_file = ""
+
+[settings]
+default_theme = "Tokyo Night"
+
+[defaults]
+rules = true
+skills = true
+registry = true
+profiles = true
+
+[stacks.react]
+name = "React / Next.js / React Native / Expo"
+detect = ["package.json", "tsconfig.json"]
+rules_dir = "react"
+
+[stacks.dotnet]
+name = ".NET / C#"
+detect = ["*.csproj", "*.sln"]
+rules_dir = "dotnet"
+
+[stacks.integrations]
+name = "Integrations (Bitbucket, Azure DevOps, GitHub, Jira)"
+rules_dir = "integrations"
+
+[wrapper_files]
+items = ["CLAUDE.md", "COPILOT.md", "CURSOR.md", "CODEX.md", "GEMINI.md"]
+
+[global_symlinks.claude]
+name = "Claude Code"
+cli = "claude"
+paths = [
+    { src = "CLAUDE.md", dst = "~/.claude/CLAUDE.md" },
+    { src = ".claude/rules/", dst = "~/.claude/rules/" },
+    { src = ".claude/skills/", dst = "~/.claude/skills/" },
+]
+
+[global_symlinks.gemini]
+name = "Gemini CLI / Antigravity"
+cli = "gemini"
+alt_cli = "antigravity"
+paths = [
+    { src = "GEMINI.md", dst = "~/.gemini/GEMINI.md" },
+    { src = "AGENT.md", dst = "~/.gemini/AGENT.md" },
+]
+
+[global_symlinks.codex]
+name = "Codex CLI"
+cli = "codex"
+paths = [
+    { src = "CODEX.md", dst = "~/.codex/AGENTS.md" },
+    { src = "AGENT.md", dst = "~/.codex/AGENT.md" },
+]
+
+[global_symlinks.windsurf]
+name = "Windsurf"
+paths = [
+    { src = "AGENT.md", dst = "~/.codeium/windsurf/memories/global_rules.md" },
+]
+
+[global_symlinks.continue]
+name = "Continue.dev"
+paths = [
+    { src = ".claude/rules/", dst = "~/.continue/rules/" },
+]

@@ -1,0 +1,15 @@
+name = "React Full Stack"
+description = "Frontend rules + recommended plugins"
+stacks = ["react", "integrations"]
+
+[rules]
+items = ["commit-conventions", "no-auto-push", "plan-refinement", "security", "logging",
+         "typescript", "accessibility", "components", "internationalization",
+         "no-hardcoded-colors", "responsive-web-ui", "api-integration",
+         "bitbucket", "azure-devops", "jira"]
+
+[skills]
+items = ["commit", "create-pr", "new-issue", "review", "refactor", "document", "debug"]
+
+[plugins]
+items = ["superpowers", "ui-ux-pro-max", "coderabbit", "context7", "commit-commands"]

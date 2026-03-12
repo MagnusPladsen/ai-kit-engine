@@ -1,0 +1,16 @@
+name = ".NET Enterprise"
+description = "Backend rules + all skills"
+stacks = ["dotnet", "integrations"]
+
+[rules]
+items = ["commit-conventions", "no-auto-push", "plan-refinement", "security", "logging", "database",
+         "csharp", "clean-architecture", "cqrs-mediatr", "domain-models",
+         "persistence-entities", "repository-query-pattern", "error-handling",
+         "bitbucket", "azure-devops", "jira"]
+
+[skills]
+items = ["commit", "create-pr", "new-issue", "add-migration", "validate-architecture",
+         "review", "refactor", "document", "debug"]
+
+[plugins]
+items = ["superpowers", "coderabbit", "context7", "atlassian", "commit-commands"]

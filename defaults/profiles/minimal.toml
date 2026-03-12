@@ -1,0 +1,12 @@
+name = "Minimal"
+description = "Shared rules + commit skill only"
+stacks = []
+
+[rules]
+items = ["commit-conventions", "no-auto-push", "plan-refinement", "security"]
+
+[skills]
+items = ["commit", "review"]
+
+[plugins]
+items = []
