@@ -759,29 +759,37 @@ if [ "$MODE" = "check" ]; then
     out_of_sync=0
     in_sync=0
 
-    # Check rules
-    for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-        [ -f "$kit_rule" ] || continue
+    # Check rules (from both engine defaults and content repo)
+    _check_rule() {
+        local kit_rule="$1"
+        [ -f "$kit_rule" ] || return
+        local name
         name=$(basename "$kit_rule")
-        installed="$CHECK_DIR/.claude/rules/$name"
+        local installed="$CHECK_DIR/.claude/rules/$name"
         if [ -f "$installed" ]; then
             if diff -q "$kit_rule" "$installed" >/dev/null 2>&1; then
                 in_sync=$((in_sync + 1))
             elif [ -L "$installed" ]; then
-                # Symlink — check if it points to the right place
                 in_sync=$((in_sync + 1))
             else
                 echo "  ${WARN}↻${RESET} ${name} ${DIM}(out of date)${RESET}"
                 out_of_sync=$((out_of_sync + 1))
             fi
         fi
+    }
+    for _rule_base in "$ENGINE_DIR/defaults/rules" "$KIT_DIR/rules"; do
+        for kit_rule in "$_rule_base"/*/*.md; do
+            _check_rule "$kit_rule"
+        done
     done
 
-    # Check skills
-    for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-        [ -f "$kit_skill" ] || continue
+    # Check skills (from both engine defaults and content repo)
+    _check_skill() {
+        local kit_skill="$1"
+        [ -f "$kit_skill" ] || return
+        local name
         name=$(basename "$(dirname "$kit_skill")")
-        installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
+        local installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
         if [ -f "$installed" ]; then
             if diff -q "$kit_skill" "$installed" >/dev/null 2>&1; then
                 in_sync=$((in_sync + 1))
@@ -792,6 +800,11 @@ if [ "$MODE" = "check" ]; then
                 out_of_sync=$((out_of_sync + 1))
             fi
         fi
+    }
+    for _skill_base in "$ENGINE_DIR/defaults/skills" "$KIT_DIR/skills"; do
+        for kit_skill in "$_skill_base"/*/SKILL.md; do
+            _check_skill "$kit_skill"
+        done
     done
 
     if [ "$out_of_sync" -eq 0 ]; then
@@ -855,13 +868,23 @@ count_tokens() {
     echo $(( (words * 13 + 5) / 10 ))
 }
 
-# Total tokens for all rules in a category directory
+# Total tokens for all rules in a category directory (checks both engine defaults and content repo)
 count_category_tokens() {
     local total=0
-    for f in "$KIT_DIR"/rules/"$1"/*.md; do
-        [ -f "$f" ] || continue
-        total=$((total + $(count_tokens "$f")))
-    done
+    # Engine defaults
+    if [ "$KT_DEFAULTS_RULES" = true ] && [ -d "$ENGINE_DIR/defaults/rules/$1" ]; then
+        for f in "$ENGINE_DIR/defaults/rules/$1"/*.md; do
+            [ -f "$f" ] || continue
+            total=$((total + $(count_tokens "$f")))
+        done
+    fi
+    # Content repo (wrapper mode)
+    if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -d "$KIT_DIR/rules/$1" ]; then
+        for f in "$KIT_DIR"/rules/"$1"/*.md; do
+            [ -f "$f" ] || continue
+            total=$((total + $(count_tokens "$f")))
+        done
+    fi
     echo $total
 }
 
@@ -904,23 +927,27 @@ if [ "$MODE" = "uninstall" ]; then
         removed=$((removed + 1))
     }
 
-    # Remove rules installed by kit (only those that match kit source names)
-    for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-        [ -f "$kit_rule" ] || continue
-        name=$(basename "$kit_rule")
-        safe_remove "$UNINST_DIR/.claude/rules/$name" "rules/$name"
+    # Remove rules installed by kit (from both engine defaults and content repo)
+    for _rule_base in "$ENGINE_DIR/defaults/rules" "$KIT_DIR/rules"; do
+        for kit_rule in "$_rule_base"/*/*.md; do
+            [ -f "$kit_rule" ] || continue
+            name=$(basename "$kit_rule")
+            safe_remove "$UNINST_DIR/.claude/rules/$name" "rules/$name"
+        done
     done
 
-    # Remove skills installed by kit
-    for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-        [ -f "$kit_skill" ] || continue
-        skill_name=$(basename "$(dirname "$kit_skill")")
-        safe_remove "$UNINST_DIR/.claude/skills/$skill_name/SKILL.md" "skills/$skill_name"
-        rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
+    # Remove skills installed by kit (from both engine defaults and content repo)
+    for _skill_base in "$ENGINE_DIR/defaults/skills" "$KIT_DIR/skills"; do
+        for kit_skill in "$_skill_base"/*/SKILL.md; do
+            [ -f "$kit_skill" ] || continue
+            skill_name=$(basename "$(dirname "$kit_skill")")
+            safe_remove "$UNINST_DIR/.claude/skills/$skill_name/SKILL.md" "skills/$skill_name"
+            rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
+        done
     done
 
     # Remove AI tool files (only if they match kit AGENT.md content)
-    for name in AGENT.md CLAUDE.md COPILOT.md CURSOR.md CODEX.md GEMINI.md; do
+    for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
         target="$UNINST_DIR/$name"
         if [ -f "$target" ]; then
             if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
@@ -1718,9 +1745,20 @@ _load_profile_toml() {
     while IFS= read -r p; do PROFILE_PLUGINS+=("$p"); done < <(_parse_toml_array "$file" "plugins")
 }
 
-# Initialize registry and profiles at startup
-_parse_registry "$KIT_DIR/registry.toml"
-_discover_profiles "$KIT_DIR/profiles"
+# Initialize registry and profiles at startup — engine defaults first, then content repo
+if [ "$KT_DEFAULTS_REGISTRY" = true ] && [ -f "$ENGINE_DIR/defaults/registry.toml" ]; then
+    _parse_registry "$ENGINE_DIR/defaults/registry.toml"
+fi
+if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -f "$KIT_DIR/registry.toml" ]; then
+    _parse_registry "$KIT_DIR/registry.toml"
+fi
+
+if [ "$KT_DEFAULTS_PROFILES" = true ] && [ -d "$ENGINE_DIR/defaults/profiles" ]; then
+    _discover_profiles "$ENGINE_DIR/defaults/profiles"
+fi
+if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -d "$KIT_DIR/profiles" ]; then
+    _discover_profiles "$KIT_DIR/profiles"
+fi
 
 USE_TEAM_CONFIG=false
 HAS_TEAM_CONFIG=false
@@ -1739,6 +1777,55 @@ if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ] && [ -f "$(pwd)/.${KT_WATE
     while IFS= read -r p; do _tc_plugins+=("$p"); done < <(_parse_toml_array "$_tc_file" "plugins")
 fi
 
+# Helper: find a rule file path by name, checking content repo then engine defaults
+# Sets _found_rule_path and _found_rule_source, returns 0 if found
+_find_rule_file() {
+    local name="$1"
+    _found_rule_path=""
+    _found_rule_source=""
+
+    # Check content repo first (wrapper mode)
+    if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+        for _sk in "${_STACK_KEYS[@]}"; do
+            local _si=$(_stack_index "$_sk")
+            local _rd="${_STACK_RULES_DIRS[$_si]}"
+            [ -z "$_rd" ] && _rd="$_sk"
+            if [ -f "$KIT_DIR/rules/$_rd/$name.md" ]; then
+                _found_rule_path="$KIT_DIR/rules/$_rd/$name.md"
+                _found_rule_source="$_rd"
+                return 0
+            fi
+        done
+        for _cat in shared custom; do
+            if [ -f "$KIT_DIR/rules/$_cat/$name.md" ]; then
+                _found_rule_path="$KIT_DIR/rules/$_cat/$name.md"
+                _found_rule_source="$_cat"
+                return 0
+            fi
+        done
+    fi
+
+    # Check engine defaults
+    for _sk in "${_STACK_KEYS[@]}"; do
+        local _si=$(_stack_index "$_sk")
+        local _rd="${_STACK_RULES_DIRS[$_si]}"
+        [ -z "$_rd" ] && _rd="$_sk"
+        if [ -f "$ENGINE_DIR/defaults/rules/$_rd/$name.md" ]; then
+            _found_rule_path="$ENGINE_DIR/defaults/rules/$_rd/$name.md"
+            _found_rule_source="$_rd"
+            return 0
+        fi
+    done
+    for _cat in shared custom; do
+        if [ -f "$ENGINE_DIR/defaults/rules/$_cat/$name.md" ]; then
+            _found_rule_path="$ENGINE_DIR/defaults/rules/$_cat/$name.md"
+            _found_rule_source="$_cat"
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Helper: apply team config selections
 _apply_team_config() {
     TARGET_DIR="$(pwd)"
@@ -1755,26 +1842,15 @@ _apply_team_config() {
     CHOSEN_RULES=("${_tc_rules[@]}")
     CHOSEN_RULE_NAMES=()
     CHOSEN_RULE_SOURCES=()
+    CHOSEN_RULE_PATHS=()
     for r in "${_tc_rules[@]}"; do
         CHOSEN_RULE_NAMES+=("$r")
-        for _sk in "${_STACK_KEYS[@]}"; do
-            local _rd
-            local _si=$(_stack_index "$_sk")
-            _rd="${_STACK_RULES_DIRS[$_si]}"
-            [ -z "$_rd" ] && _rd="$_sk"
-            if [ -f "$KIT_DIR/rules/$_rd/$r.md" ]; then
-                CHOSEN_RULE_SOURCES+=("$_rd")
-                break
-            fi
-        done
-        # Also check shared and custom
-        if [ ${#CHOSEN_RULE_SOURCES[@]} -lt ${#CHOSEN_RULE_NAMES[@]} ]; then
-            for cat in shared custom; do
-                if [ -f "$KIT_DIR/rules/$cat/$r.md" ]; then
-                    CHOSEN_RULE_SOURCES+=("$cat")
-                    break
-                fi
-            done
+        if _find_rule_file "$r"; then
+            CHOSEN_RULE_SOURCES+=("$_found_rule_source")
+            CHOSEN_RULE_PATHS+=("$_found_rule_path")
+        else
+            CHOSEN_RULE_SOURCES+=("unknown")
+            CHOSEN_RULE_PATHS+=("")
         fi
     done
     CHOSEN_SKILLS=("${_tc_skills[@]}")
@@ -1876,18 +1952,24 @@ if [ "$MODE" = "uninstall" ] && [ "$FLAG_ACTION" = false ]; then
         fi
         removed=$((removed + 1))
     }
-    for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-        [ -f "$kit_rule" ] || continue
-        name=$(basename "$kit_rule")
-        safe_remove "$UNINST_DIR/.claude/rules/$name" "rules/$name"
+    # Remove rules from both engine defaults and content repo
+    for _rule_base in "$ENGINE_DIR/defaults/rules" "$KIT_DIR/rules"; do
+        for kit_rule in "$_rule_base"/*/*.md; do
+            [ -f "$kit_rule" ] || continue
+            name=$(basename "$kit_rule")
+            safe_remove "$UNINST_DIR/.claude/rules/$name" "rules/$name"
+        done
     done
-    for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-        [ -f "$kit_skill" ] || continue
-        skill_name=$(basename "$(dirname "$kit_skill")")
-        safe_remove "$UNINST_DIR/.claude/skills/$skill_name/SKILL.md" "skills/$skill_name"
-        rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
+    # Remove skills from both engine defaults and content repo
+    for _skill_base in "$ENGINE_DIR/defaults/skills" "$KIT_DIR/skills"; do
+        for kit_skill in "$_skill_base"/*/SKILL.md; do
+            [ -f "$kit_skill" ] || continue
+            skill_name=$(basename "$(dirname "$kit_skill")")
+            safe_remove "$UNINST_DIR/.claude/skills/$skill_name/SKILL.md" "skills/$skill_name"
+            rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
+        done
     done
-    for name in AGENT.md CLAUDE.md COPILOT.md CURSOR.md CODEX.md GEMINI.md; do
+    for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
         target="$UNINST_DIR/$name"
         if [ -f "$target" ]; then
             if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
@@ -2267,31 +2349,49 @@ if [ "$MODE" = "update" ]; then
     fi
 
     # Update AI tool copies (project install)
-    for name in CLAUDE.md COPILOT.md CURSOR.md CODEX.md GEMINI.md; do
+    for name in "${_WRAPPER_FILES[@]}"; do
         if [ -f "$UPDATE_DIR/$name" ]; then
             update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/$name" "$name"
         fi
     done
 
-    # Update rules
+    # Update rules (check content repo first, then engine defaults)
     for installed_rule in "$UPDATE_DIR/.claude/rules/"*.md; do
         [ -f "$installed_rule" ] || continue
         name=$(basename "$installed_rule")
-        for kit_rule in "$KIT_DIR"/rules/*/"$name"; do
-            if [ -f "$kit_rule" ]; then
-                update_file "$kit_rule" "$installed_rule" "rules/$name"
-                break
-            fi
-        done
+        _rule_updated=false
+        # Content repo takes priority
+        if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+            for kit_rule in "$KIT_DIR"/rules/*/"$name"; do
+                if [ -f "$kit_rule" ]; then
+                    update_file "$kit_rule" "$installed_rule" "rules/$name"
+                    _rule_updated=true
+                    break
+                fi
+            done
+        fi
+        # Fall back to engine defaults
+        if [ "$_rule_updated" = false ]; then
+            for kit_rule in "$ENGINE_DIR"/defaults/rules/*/"$name"; do
+                if [ -f "$kit_rule" ]; then
+                    update_file "$kit_rule" "$installed_rule" "rules/$name"
+                    break
+                fi
+            done
+        fi
     done
 
-    # Update skills
+    # Update skills (check content repo first, then engine defaults)
     for installed_skill in "$UPDATE_DIR/.claude/skills/"*/SKILL.md; do
         [ -f "$installed_skill" ] || continue
         skill_name=$(basename "$(dirname "$installed_skill")")
-        kit_skill="$KIT_DIR/skills/$skill_name/SKILL.md"
-        if [ -f "$kit_skill" ]; then
-            update_file "$kit_skill" "$installed_skill" "skills/$skill_name"
+        _skill_updated=false
+        if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -f "$KIT_DIR/skills/$skill_name/SKILL.md" ]; then
+            update_file "$KIT_DIR/skills/$skill_name/SKILL.md" "$installed_skill" "skills/$skill_name"
+            _skill_updated=true
+        fi
+        if [ "$_skill_updated" = false ] && [ -f "$ENGINE_DIR/defaults/skills/$skill_name/SKILL.md" ]; then
+            update_file "$ENGINE_DIR/defaults/skills/$skill_name/SKILL.md" "$installed_skill" "skills/$skill_name"
         fi
     done
 
@@ -2395,30 +2495,76 @@ apply_profile() {
     if [ "$1" = "★ Everything" ] || [ "$1" = "Everything" ]; then
         PROFILE_STACKS=()
         for _sn in "${_STACK_NAMES[@]}"; do PROFILE_STACKS+=("$_sn"); done
-        # Rules: all .md files from all categories
+        # Rules: all .md files from all categories (both sources, deduplicated)
         PROFILE_RULES=()
-        # Scan stack-specific rule dirs
-        for _si in "${!_STACK_KEYS[@]}"; do
-            local _rd="${_STACK_RULES_DIRS[$_si]}"
-            [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
-            for _f in "$KIT_DIR/rules/$_rd"/*.md; do
-                [ -f "$_f" ] || continue
-                PROFILE_RULES+=("$(basename "$_f" .md)")
+        local _seen_rule_names=()
+        _add_profile_rule() {
+            local _n="$1"
+            for _sn in "${_seen_rule_names[@]}"; do
+                [ "$_sn" = "$_n" ] && return
             done
-        done
-        # Also scan shared and custom
-        for _cat in shared custom; do
-            for _f in "$KIT_DIR/rules/$_cat"/*.md; do
-                [ -f "$_f" ] || continue
-                PROFILE_RULES+=("$(basename "$_f" .md)")
+            _seen_rule_names+=("$_n")
+            PROFILE_RULES+=("$_n")
+        }
+        # Scan engine defaults
+        if [ "$KT_DEFAULTS_RULES" = true ]; then
+            for _si in "${!_STACK_KEYS[@]}"; do
+                local _rd="${_STACK_RULES_DIRS[$_si]}"
+                [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+                for _f in "$ENGINE_DIR/defaults/rules/$_rd"/*.md; do
+                    [ -f "$_f" ] || continue
+                    _add_profile_rule "$(basename "$_f" .md)"
+                done
             done
-        done
-        # Skills: all discovered skills
+            for _cat in shared custom; do
+                for _f in "$ENGINE_DIR/defaults/rules/$_cat"/*.md; do
+                    [ -f "$_f" ] || continue
+                    _add_profile_rule "$(basename "$_f" .md)"
+                done
+            done
+        fi
+        # Scan content repo (wrapper mode)
+        if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+            for _si in "${!_STACK_KEYS[@]}"; do
+                local _rd="${_STACK_RULES_DIRS[$_si]}"
+                [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
+                for _f in "$KIT_DIR/rules/$_rd"/*.md; do
+                    [ -f "$_f" ] || continue
+                    _add_profile_rule "$(basename "$_f" .md)"
+                done
+            done
+            for _cat in shared custom; do
+                for _f in "$KIT_DIR/rules/$_cat"/*.md; do
+                    [ -f "$_f" ] || continue
+                    _add_profile_rule "$(basename "$_f" .md)"
+                done
+            done
+        fi
+        unset _seen_rule_names
+        # Skills: all discovered skills (both sources, deduplicated)
         PROFILE_SKILLS=()
-        for _sd in "$KIT_DIR/skills"/*/SKILL.md; do
-            [ -f "$_sd" ] || continue
-            PROFILE_SKILLS+=("$(basename "$(dirname "$_sd")")")
-        done
+        local _seen_skill_names=()
+        _add_profile_skill() {
+            local _n="$1"
+            for _sn in "${_seen_skill_names[@]}"; do
+                [ "$_sn" = "$_n" ] && return
+            done
+            _seen_skill_names+=("$_n")
+            PROFILE_SKILLS+=("$_n")
+        }
+        if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+            for _sd in "$ENGINE_DIR/defaults/skills"/*/SKILL.md; do
+                [ -f "$_sd" ] || continue
+                _add_profile_skill "$(basename "$(dirname "$_sd")")"
+            done
+        fi
+        if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+            for _sd in "$KIT_DIR/skills"/*/SKILL.md; do
+                [ -f "$_sd" ] || continue
+                _add_profile_skill "$(basename "$(dirname "$_sd")")"
+            done
+        fi
+        unset _seen_skill_names
         # Plugins + MCPs: everything from registry
         PROFILE_PLUGINS=()
         for _p in "${_REG_PLUGIN_NAMES[@]}"; do PROFILE_PLUGINS+=("$_p"); done
@@ -2464,34 +2610,22 @@ apply_profile_selections() {
     _sync_legacy_stacks
     unset _ps
 
-    # Build CHOSEN_RULES with source info
+    # Build CHOSEN_RULES with source info (dual-source aware)
     CHOSEN_RULES=("${PROFILE_RULES[@]}")
     CHOSEN_RULE_NAMES=()
     CHOSEN_RULE_SOURCES=()
+    CHOSEN_RULE_PATHS=()
     for _r in "${PROFILE_RULES[@]}"; do
         CHOSEN_RULE_NAMES+=("$_r")
-        # Find the source category — check all stack rules_dirs + shared + custom
-        local _found=false
-        for _si in "${!_STACK_KEYS[@]}"; do
-            local _rd="${_STACK_RULES_DIRS[$_si]}"
-            [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
-            if [ -f "$KIT_DIR/rules/$_rd/$_r.md" ]; then
-                CHOSEN_RULE_SOURCES+=("$_rd")
-                _found=true
-                break
-            fi
-        done
-        if [ "$_found" = false ]; then
-            for _cat in shared custom; do
-                if [ -f "$KIT_DIR/rules/$_cat/$_r.md" ]; then
-                    CHOSEN_RULE_SOURCES+=("$_cat")
-                    _found=true
-                    break
-                fi
-            done
+        if _find_rule_file "$_r"; then
+            CHOSEN_RULE_SOURCES+=("$_found_rule_source")
+            CHOSEN_RULE_PATHS+=("$_found_rule_path")
+        else
+            CHOSEN_RULE_SOURCES+=("unknown")
+            CHOSEN_RULE_PATHS+=("")
         fi
     done
-    unset _r _cat _found
+    unset _r
 
     CHOSEN_SKILLS=("${PROFILE_SKILLS[@]}")
     CHOSEN_PLUGINS=("${PROFILE_PLUGINS[@]}")
@@ -2628,15 +2762,41 @@ while [ "$FLOW" -le 7 ]; do
                 echo "  from their config location to ${TEAL}~/$KT_CONFIG_DIR/${RESET}:"
             fi
             echo ""
-            echo "  ${TEAL}┌──────────────────┬─────────────────────────────────────┐${RESET}"
-            echo "  ${TEAL}│${RESET} ${BOLD}Tool${RESET}             ${TEAL}│${RESET} ${BOLD}Global path${RESET}                         ${TEAL}│${RESET}"
-            echo "  ${TEAL}├──────────────────┼─────────────────────────────────────┤${RESET}"
-            echo "  ${TEAL}│${RESET} Claude Code      ${TEAL}│${RESET} ${DIM}~/.claude/CLAUDE.md + rules/skills${RESET}  ${TEAL}│${RESET}"
-            echo "  ${TEAL}│${RESET} Gemini CLI       ${TEAL}│${RESET} ${DIM}~/.gemini/GEMINI.md${RESET}                 ${TEAL}│${RESET}"
-            echo "  ${TEAL}│${RESET} Codex CLI        ${TEAL}│${RESET} ${DIM}~/.codex/AGENTS.md${RESET}                  ${TEAL}│${RESET}"
-            echo "  ${TEAL}│${RESET} Windsurf         ${TEAL}│${RESET} ${DIM}~/.codeium/windsurf/memories/${RESET}       ${TEAL}│${RESET}"
-            echo "  ${TEAL}│${RESET} Continue.dev     ${TEAL}│${RESET} ${DIM}~/.continue/rules/${RESET}                  ${TEAL}│${RESET}"
-            echo "  ${TEAL}└──────────────────┴─────────────────────────────────────┘${RESET}"
+            # Build tool info table dynamically from kit.toml symlinks
+            _tbl_max_name=4  # minimum "Tool" header width
+            _tbl_max_path=11  # minimum "Global path" header width
+            _tbl_names=()
+            _tbl_paths=()
+            for _si in "${!_SYM_NAMES[@]}"; do
+                _tn="${_SYM_NAMES[$_si]}"
+                _tbl_names+=("$_tn")
+                # Build summary path from first destination
+                _first_dst=""
+                IFS=',' read -ra _tpp <<< "${_SYM_PATHS[$_si]}"
+                if [ ${#_tpp[@]} -gt 0 ]; then
+                    _first_dst="${_tpp[0]##*|}"
+                    _first_dst="${_first_dst/#\~/$HOME}"
+                    _first_dst="${_first_dst/#$HOME/\~}"
+                    if [ ${#_tpp[@]} -gt 1 ]; then
+                        _first_dst="$_first_dst + more"
+                    fi
+                fi
+                _tbl_paths+=("$_first_dst")
+                [ ${#_tn} -gt $_tbl_max_name ] && _tbl_max_name=${#_tn}
+                [ ${#_first_dst} -gt $_tbl_max_path ] && _tbl_max_path=${#_first_dst}
+            done
+            # Pad columns (add 2 for spacing)
+            _tbl_max_name=$((_tbl_max_name + 2))
+            _tbl_max_path=$((_tbl_max_path + 2))
+            # Print table
+            printf "  ${TEAL}┌%*s┬%*s┐${RESET}\n" "$_tbl_max_name" "" "$_tbl_max_path" "" | tr ' ' '─'
+            printf "  ${TEAL}│${RESET} %-*s${TEAL}│${RESET} %-*s${TEAL}│${RESET}\n" "$((_tbl_max_name - 1))" "${BOLD}Tool${RESET}" "$((_tbl_max_path - 1))" "${BOLD}Global path${RESET}"
+            printf "  ${TEAL}├%*s┼%*s┤${RESET}\n" "$_tbl_max_name" "" "$_tbl_max_path" "" | tr ' ' '─'
+            for _ti in "${!_tbl_names[@]}"; do
+                printf "  ${TEAL}│${RESET} %-*s${TEAL}│${RESET} ${DIM}%-*s${RESET}${TEAL}│${RESET}\n" "$((_tbl_max_name - 1))" "${_tbl_names[$_ti]}" "$((_tbl_max_path - 1))" "${_tbl_paths[$_ti]}"
+            done
+            printf "  ${TEAL}└%*s┴%*s┘${RESET}\n" "$_tbl_max_name" "" "$_tbl_max_path" "" | tr ' ' '─'
+            unset _tbl_names _tbl_paths _tbl_max_name _tbl_max_path
             echo ""
             echo "  ${DIM}These tools do NOT support global filesystem config:${RESET}"
             echo "  ${DIM}Cursor (UI settings only), Copilot (VS Code setting),${RESET}"
@@ -2644,8 +2804,12 @@ while [ "$FLOW" -le 7 ]; do
             echo "  ${DIM}→ For these, copy files from ~/$KT_CONFIG_DIR/ into each project manually.${RESET}"
             echo ""
 
-            checkbox_select "Which tools should we set up symlinks for?" \
-                "Claude Code" "Gemini CLI" "Codex CLI" "Windsurf" "Continue.dev"
+            _tool_names=()
+            for _si in "${!_SYM_NAMES[@]}"; do
+                _tool_names+=("${_SYM_NAMES[$_si]}")
+            done
+            checkbox_select "Which tools should we set up symlinks for?" "${_tool_names[@]}"
+            unset _tool_names
 
             if [ "$CHECKBOX_BACK" = true ]; then
                 FLOW=1; continue
@@ -2715,17 +2879,21 @@ while [ "$FLOW" -le 7 ]; do
 
             all_rules=()
             all_rule_sources=()
+            all_rule_paths=()
             CB_TOKENS=()
             CB_INSTALLED=()
             CB_HEAVY=()
 
             # Helper to add a rule with token info
             _add_rule() {
-                local name="$1" cat="$2"
+                local name="$1" cat="$2" path="$3"
+                local real_name
+                real_name="$(echo "$name" | sed 's/ (default)$//; s/ (custom)$//')"
                 all_rules+=("$name")
                 all_rule_sources+=("$cat")
-                CB_TOKENS+=("$(count_tokens "$KIT_DIR/rules/$cat/$name.md")")
-                if [ -f "$TARGET_DIR/.claude/rules/$name.md" ] || [ -L "$TARGET_DIR/.claude/rules/$name.md" ]; then
+                all_rule_paths+=("$path")
+                CB_TOKENS+=("$(count_tokens "$path")")
+                if [ -f "$TARGET_DIR/.claude/rules/$real_name.md" ] || [ -L "$TARGET_DIR/.claude/rules/$real_name.md" ]; then
                     CB_INSTALLED+=(1)
                 else
                     CB_INSTALLED+=(0)
@@ -2733,11 +2901,71 @@ while [ "$FLOW" -le 7 ]; do
                 CB_HEAVY+=(0)
             }
 
+            # Build list of rule files for a category from both engine defaults and content repo
+            # Sets: _cat_files (paths), _cat_names (display names)
+            _build_category_files() {
+                local cat="$1"
+                _cat_files=()
+                _cat_names=()
+
+                local _default_dir="$ENGINE_DIR/defaults/rules/$cat"
+                local _custom_dir="$KIT_DIR/rules/$cat"
+                local _default_names=()
+
+                # Standalone mode — just scan defaults
+                if [ "$KIT_DIR" = "$ENGINE_DIR" ]; then
+                    if [ -d "$_default_dir" ]; then
+                        for _f in "$_default_dir"/*.md; do
+                            [ -f "$_f" ] || continue
+                            _cat_files+=("$_f")
+                            _cat_names+=("$(basename "$_f" .md)")
+                        done
+                    fi
+                    return
+                fi
+
+                # Wrapper mode — scan defaults first (if enabled), then content repo
+                if [ "$KT_DEFAULTS_RULES" = true ] && [ -d "$_default_dir" ]; then
+                    for _f in "$_default_dir"/*.md; do
+                        [ -f "$_f" ] || continue
+                        local _n
+                        _n="$(basename "$_f" .md)"
+                        _default_names+=("$_n")
+                        if [ -f "$_custom_dir/$_n.md" ]; then
+                            _cat_files+=("$_f")
+                            _cat_names+=("$_n (default)")
+                        else
+                            _cat_files+=("$_f")
+                            _cat_names+=("$_n")
+                        fi
+                    done
+                fi
+
+                if [ -d "$_custom_dir" ]; then
+                    for _f in "$_custom_dir"/*.md; do
+                        [ -f "$_f" ] || continue
+                        local _n _is_collision=false
+                        _n="$(basename "$_f" .md)"
+                        for _dn in "${_default_names[@]}"; do
+                            if [ "$_dn" = "$_n" ]; then _is_collision=true; break; fi
+                        done
+                        if [ "$_is_collision" = true ]; then
+                            _cat_files+=("$_f")
+                            _cat_names+=("$_n (custom)")
+                        else
+                            _cat_files+=("$_f")
+                            _cat_names+=("$_n")
+                        fi
+                    done
+                fi
+            }
+
             # Shared rules — always shown
-            if compgen -G "$KIT_DIR/rules/shared/*.md" >/dev/null 2>&1; then
+            _build_category_files "shared"
+            if [ ${#_cat_files[@]} -gt 0 ]; then
                 echo "  ${LIME}Shared${RESET} ${DIM}(always loaded)${RESET}"
-                for _rf in "$KIT_DIR/rules/shared"/*.md; do
-                    _add_rule "$(basename "$_rf" .md)" "shared"
+                for _ci in "${!_cat_files[@]}"; do
+                    _add_rule "${_cat_names[$_ci]}" "shared" "${_cat_files[$_ci]}"
                 done
             fi
 
@@ -2746,29 +2974,27 @@ while [ "$FLOW" -le 7 ]; do
                 if [ "${_STACK_ACTIVE[$_si]}" = true ]; then
                     local _rd="${_STACK_RULES_DIRS[$_si]}"
                     [ -z "$_rd" ] && _rd="${_STACK_KEYS[$_si]}"
-                    if compgen -G "$KIT_DIR/rules/$_rd/*.md" >/dev/null 2>&1; then
-                        echo "  ${LIME}${_STACK_NAMES[$_si]}${RESET} ${DIM}(up to ~$(count_category_tokens "$_rd") tk)${RESET}"
-                        for _rf in "$KIT_DIR/rules/$_rd"/*.md; do
-                            _add_rule "$(basename "$_rf" .md)" "$_rd"
+                    _build_category_files "$_rd"
+                    if [ ${#_cat_files[@]} -gt 0 ]; then
+                        local _cat_tk=0
+                        for _cf in "${_cat_files[@]}"; do
+                            _cat_tk=$((_cat_tk + $(count_tokens "$_cf")))
+                        done
+                        echo "  ${LIME}${_STACK_NAMES[$_si]}${RESET} ${DIM}(up to ~${_cat_tk} tk)${RESET}"
+                        for _ci in "${!_cat_files[@]}"; do
+                            _add_rule "${_cat_names[$_ci]}" "$_rd" "${_cat_files[$_ci]}"
                         done
                     fi
                 fi
             done
 
             # Custom rules (rules/custom/*.md — user-created, survives git pull)
-            if [ -d "$KIT_DIR/rules/custom" ]; then
-                _custom_count=0
-                for _cf in "$KIT_DIR"/rules/custom/*.md; do
-                    [ -f "$_cf" ] || continue
-                    _custom_count=$((_custom_count + 1))
+            _build_category_files "custom"
+            if [ ${#_cat_files[@]} -gt 0 ]; then
+                echo "  ${LIME}Custom${RESET} ${DIM}(your team rules — rules/custom/)${RESET}"
+                for _ci in "${!_cat_files[@]}"; do
+                    _add_rule "${_cat_names[$_ci]}" "custom" "${_cat_files[$_ci]}"
                 done
-                if [ "$_custom_count" -gt 0 ]; then
-                    echo "  ${LIME}Custom${RESET} ${DIM}(your team rules — rules/custom/)${RESET}"
-                    for _cf in "$KIT_DIR"/rules/custom/*.md; do
-                        [ -f "$_cf" ] || continue
-                        _add_rule "$(basename "$_cf" .md)" "custom"
-                    done
-                fi
             fi
 
             echo ""
@@ -2796,6 +3022,7 @@ while [ "$FLOW" -le 7 ]; do
             CHOSEN_RULES=("${SELECTED[@]}")
             CHOSEN_RULE_NAMES=("${all_rules[@]}")
             CHOSEN_RULE_SOURCES=("${all_rule_sources[@]}")
+            CHOSEN_RULE_PATHS=("${all_rule_paths[@]}")
             FLOW=5
             ;;
 
@@ -2804,17 +3031,42 @@ while [ "$FLOW" -le 7 ]; do
 
             echo "  ${LIME}Skills${RESET} ${DIM}(0 tokens — loaded only when invoked)${RESET}"
             all_skills=()
-            for _sd in "$KIT_DIR/skills"/*/SKILL.md; do
-                [ -f "$_sd" ] || continue
-                _sk_name="$(basename "$(dirname "$_sd")")"
-                # Check stack gating from frontmatter
-                _sk_stack="$(grep -m1 '^stack:' "$_sd" | sed 's/^stack:[[:space:]]*//')"
-                case "$_sk_stack" in
-                    react)  [ "$HAS_REACT" = true ] || continue ;;
-                    dotnet) [ "$HAS_DOTNET" = true ] || continue ;;
-                esac
-                all_skills+=("$_sk_name")
-            done
+            _seen_skill_names=()
+
+            # Scan skills from a directory, skipping duplicates
+            _scan_skills_dir() {
+                local _dir="$1"
+                for _sd in "$_dir"/*/SKILL.md; do
+                    [ -f "$_sd" ] || continue
+                    local _sk_name
+                    _sk_name="$(basename "$(dirname "$_sd")")"
+                    # Skip if already seen
+                    local _already=false
+                    for _sn in "${_seen_skill_names[@]}"; do
+                        if [ "$_sn" = "$_sk_name" ]; then _already=true; break; fi
+                    done
+                    [ "$_already" = true ] && continue
+                    # Check stack gating from frontmatter
+                    local _sk_stack
+                    _sk_stack="$(grep -m1 '^stack:' "$_sd" | sed 's/^stack:[[:space:]]*//')"
+                    case "$_sk_stack" in
+                        react)  [ "$HAS_REACT" = true ] || continue ;;
+                        dotnet) [ "$HAS_DOTNET" = true ] || continue ;;
+                    esac
+                    all_skills+=("$_sk_name")
+                    _seen_skill_names+=("$_sk_name")
+                done
+            }
+
+            # Engine defaults first (standalone or wrapper with defaults enabled)
+            if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+                _scan_skills_dir "$ENGINE_DIR/defaults/skills"
+            fi
+            # Content repo skills (wrapper mode only)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -d "$KIT_DIR/skills" ]; then
+                _scan_skills_dir "$KIT_DIR/skills"
+            fi
+            unset _seen_skill_names
 
             echo "  ${LIME}Plugins${RESET} ${DIM}(external tools)${RESET}"
             echo "  ${WARN}⚡${RESET} ${DIM}= large skill, loaded on invoke (highly recommended)${RESET}"
@@ -2914,7 +3166,11 @@ while [ "$FLOW" -le 7 ]; do
             for i in "${!CHOSEN_RULE_NAMES[@]}"; do
                 for r in "${CHOSEN_RULES[@]}"; do
                     if [ "$r" = "${CHOSEN_RULE_NAMES[$i]}" ]; then
-                        _conf_rule_tk=$((_conf_rule_tk + $(count_tokens "$KIT_DIR/rules/${CHOSEN_RULE_SOURCES[$i]}/${CHOSEN_RULE_NAMES[$i]}.md")))
+                        if [ -n "${CHOSEN_RULE_PATHS[$i]:-}" ]; then
+                            _conf_rule_tk=$((_conf_rule_tk + $(count_tokens "${CHOSEN_RULE_PATHS[$i]}")))
+                        else
+                            _conf_rule_tk=$((_conf_rule_tk + $(count_tokens "$KIT_DIR/rules/${CHOSEN_RULE_SOURCES[$i]}/${CHOSEN_RULE_NAMES[$i]}.md")))
+                        fi
                         break
                     fi
                 done
@@ -3073,7 +3329,13 @@ INSTALLED_RULES=0
 for item in "${CHOSEN_RULES[@]}"; do
     for i in "${!CHOSEN_RULE_NAMES[@]}"; do
         if [ "${CHOSEN_RULE_NAMES[$i]}" = "$item" ]; then
-            do_cp "$KIT_DIR/rules/${CHOSEN_RULE_SOURCES[$i]}/$item.md" "$TARGET_DIR/.claude/rules/"
+            # Strip " (default)" or " (custom)" suffix for the installed filename
+            _real_name="$(echo "$item" | sed 's/ (default)$//; s/ (custom)$//')"
+            if [ -n "${CHOSEN_RULE_PATHS[$i]:-}" ]; then
+                do_cp "${CHOSEN_RULE_PATHS[$i]}" "$TARGET_DIR/.claude/rules/$_real_name.md"
+            else
+                do_cp "$KIT_DIR/rules/${CHOSEN_RULE_SOURCES[$i]}/$_real_name.md" "$TARGET_DIR/.claude/rules/$_real_name.md"
+            fi
             INSTALLED_RULES=$((INSTALLED_RULES + 1))
             break
         fi
@@ -3084,7 +3346,14 @@ done
 INSTALLED_SKILLS=0
 for item in "${CHOSEN_SKILLS[@]}"; do
     do_mkdir "$TARGET_DIR/.claude/skills/$item"
-    do_cp "$KIT_DIR/skills/$item/SKILL.md" "$TARGET_DIR/.claude/skills/$item/"
+    # Check content repo first, then engine defaults
+    if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -f "$KIT_DIR/skills/$item/SKILL.md" ]; then
+        do_cp "$KIT_DIR/skills/$item/SKILL.md" "$TARGET_DIR/.claude/skills/$item/"
+    elif [ -f "$ENGINE_DIR/defaults/skills/$item/SKILL.md" ]; then
+        do_cp "$ENGINE_DIR/defaults/skills/$item/SKILL.md" "$TARGET_DIR/.claude/skills/$item/"
+    elif [ -f "$KIT_DIR/skills/$item/SKILL.md" ]; then
+        do_cp "$KIT_DIR/skills/$item/SKILL.md" "$TARGET_DIR/.claude/skills/$item/"
+    fi
     INSTALLED_SKILLS=$((INSTALLED_SKILLS + 1))
 done
 
@@ -3148,64 +3417,57 @@ if [ "$INSTALL_GLOBAL" = true ] && [ ${#SELECTED_TOOLS[@]} -gt 0 ]; then
     echo ""
 
     for tool in "${SELECTED_TOOLS[@]}"; do
-        case "$tool" in
-            "Claude Code")
-                echo "  ${BOLD}${WHITE}Claude Code:${RESET}"
-                safe_link "$TARGET_DIR/AGENT.md" "$HOME/.claude/CLAUDE.md"
-                echo "    ${GREEN}✓${RESET} ~/.claude/CLAUDE.md → ~/$KT_CONFIG_DIR/AGENT.md"
+        # Find the matching symlink config from kit.toml
+        _sym_idx=-1
+        for _si in "${!_SYM_NAMES[@]}"; do
+            if [ "${_SYM_NAMES[$_si]}" = "$tool" ]; then
+                _sym_idx=$_si
+                break
+            fi
+        done
 
-                for rule in "$TARGET_DIR/.claude/rules/"*.md; do
-                    if [ -f "$rule" ]; then
-                        name=$(basename "$rule")
-                        safe_link "$rule" "$HOME/.claude/rules/$name"
+        if [ "$_sym_idx" -ge 0 ]; then
+            echo "  ${BOLD}${WHITE}${tool}:${RESET}"
+
+            # Parse serialized paths: "src1|dst1,src2|dst2"
+            IFS=',' read -ra _path_pairs <<< "${_SYM_PATHS[$_sym_idx]}"
+            for _pp in "${_path_pairs[@]}"; do
+                _psrc="${_pp%%|*}"
+                _pdst="${_pp##*|}"
+                # Expand ~ in destination
+                _pdst="${_pdst/#\~/$HOME}"
+
+                # Handle directory sources (ending with /)
+                if [[ "$_psrc" == */ ]]; then
+                    _src_dir="$TARGET_DIR/$_psrc"
+                    _dst_dir="$_pdst"
+                    if [ -d "$_src_dir" ]; then
+                        mkdir -p "$_dst_dir"
+                        for _f in "$_src_dir"*; do
+                            [ -f "$_f" ] || [ -d "$_f" ] || continue
+                            _fname="$(basename "$_f")"
+                            if [ -d "$_f" ]; then
+                                mkdir -p "$_dst_dir/$_fname"
+                                for _sf in "$_f"/*; do
+                                    [ -f "$_sf" ] || continue
+                                    safe_link "$_sf" "$_dst_dir/$_fname/$(basename "$_sf")"
+                                done
+                            else
+                                safe_link "$_f" "$_dst_dir/$_fname"
+                            fi
+                        done
+                        echo "    ${GREEN}✓${RESET} ${_pdst/#$HOME/\~} → ~/$KT_CONFIG_DIR/$_psrc"
                     fi
-                done
-                echo "    ${GREEN}✓${RESET} ~/.claude/rules/ → ~/$KT_CONFIG_DIR/.claude/rules/"
-
-                for skill_dir in "$TARGET_DIR/.claude/skills/"*/; do
-                    if [ -d "$skill_dir" ]; then
-                        name=$(basename "$skill_dir")
-                        mkdir -p "$HOME/.claude/skills/$name"
-                        safe_link "$skill_dir/SKILL.md" "$HOME/.claude/skills/$name/SKILL.md"
+                else
+                    _actual_src="$TARGET_DIR/$_psrc"
+                    if [ -f "$_actual_src" ]; then
+                        safe_link "$_actual_src" "$_pdst"
+                        echo "    ${GREEN}✓${RESET} ${_pdst/#$HOME/\~} → ~/$KT_CONFIG_DIR/$_psrc"
                     fi
-                done
-                echo "    ${GREEN}✓${RESET} ~/.claude/skills/ → ~/$KT_CONFIG_DIR/.claude/skills/"
-                echo ""
-                ;;
-
-            "Gemini CLI")
-                echo "  ${BOLD}${WHITE}Gemini CLI:${RESET}"
-                safe_link "$TARGET_DIR/AGENT.md" "$HOME/.gemini/GEMINI.md"
-                echo "    ${GREEN}✓${RESET} ~/.gemini/GEMINI.md → ~/$KT_CONFIG_DIR/AGENT.md"
-                echo ""
-                ;;
-
-            "Codex CLI")
-                echo "  ${BOLD}${WHITE}Codex CLI:${RESET}"
-                safe_link "$TARGET_DIR/AGENT.md" "$HOME/.codex/AGENTS.md"
-                echo "    ${GREEN}✓${RESET} ~/.codex/AGENTS.md → ~/$KT_CONFIG_DIR/AGENT.md"
-                echo ""
-                ;;
-
-            "Windsurf")
-                echo "  ${BOLD}${WHITE}Windsurf:${RESET}"
-                safe_link "$TARGET_DIR/AGENT.md" "$HOME/.codeium/windsurf/memories/global_rules.md"
-                echo "    ${GREEN}✓${RESET} ~/.codeium/windsurf/memories/global_rules.md → ~/$KT_CONFIG_DIR/AGENT.md"
-                echo ""
-                ;;
-
-            "Continue.dev")
-                echo "  ${BOLD}${WHITE}Continue.dev:${RESET}"
-                for rule in "$TARGET_DIR/.claude/rules/"*.md; do
-                    if [ -f "$rule" ]; then
-                        name=$(basename "$rule")
-                        safe_link "$rule" "$HOME/.continue/rules/$name"
-                    fi
-                done
-                echo "    ${GREEN}✓${RESET} ~/.continue/rules/ → ~/$KT_CONFIG_DIR/.claude/rules/"
-                echo ""
-                ;;
-        esac
+                fi
+            done
+            echo ""
+        fi
     done
 fi
 
@@ -3213,7 +3475,7 @@ fi
 
 if [ "$INSTALL_GLOBAL" = false ]; then
     local_existing=()
-    for name in CLAUDE.md COPILOT.md CURSOR.md CODEX.md GEMINI.md; do
+    for name in "${_WRAPPER_FILES[@]}"; do
         if [ -f "$TARGET_DIR/$name" ]; then
             if ! diff -q "$KIT_DIR/AGENT.md" "$TARGET_DIR/$name" >/dev/null 2>&1; then
                 local_existing[${#local_existing[@]}]="$name"
