@@ -1,0 +1,16 @@
+{
+  "name": "ai-kit-engine",
+  "version": "0.4.1",
+  "description": "Generic TUI installer engine for AI-assisted development kits",
+  "bin": {
+    "ai-kit-engine": "./bin/cli.js"
+  },
+  "keywords": ["ai", "cli", "installer", "tui", "developer-tools", "claude", "copilot", "cursor", "gemini"],
+  "author": "Magnus Pladsen",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MagnusPladsen/ai-kit-engine.git"
+  },
+  "files": ["bin/", "defaults/", "install.sh", "VERSION", "README.md", "bootstrap.sh"]
+}
