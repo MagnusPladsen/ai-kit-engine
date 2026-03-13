@@ -1870,6 +1870,23 @@ _apply_team_config() {
     CHOSEN_PLUGINS=("${_tc_plugins[@]}")
 }
 
+# ─── Startup loading animation ────────────────────────────────────────────────
+if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ]; then
+    _loading_frames=("⠋" "⠙" "⠹" "⠸" "⠼" "⠴" "⠦" "⠧" "⠇" "⠏")
+    _loading_msgs=("Scanning rules & skills" "Loading profiles & registry" "Detecting environment")
+    tput civis 2>/dev/null
+    for _msg in "${_loading_msgs[@]}"; do
+        for _f in 0 1 2 3 4; do
+            printf "\r  ${TEAL}%s${RESET} %s" "${_loading_frames[$_f]}" "$_msg..."
+            sleep 0.06
+        done
+        printf "\r  ${GREEN}✓${RESET} %s   \n" "$_msg"
+    done
+    tput cnorm 2>/dev/null
+    sleep 0.2
+    unset _loading_frames _loading_msgs _msg _f
+fi
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  STEP 1: What do you want to do?
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
