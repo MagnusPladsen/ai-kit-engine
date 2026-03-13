@@ -98,7 +98,7 @@ _SYM_PATHS=()  # serialized as "src1|dst1,src2|dst2"
 
 _parse_kit_toml() {
     local file="$1"
-    [ -f "$file" ] || return 0
+    [ -f "$file" ] || return 0 0
 
     local section="" subsection="" stack_key="" sym_key=""
     local in_paths_array=false
@@ -784,7 +784,7 @@ if [ "$MODE" = "check" ]; then
     # Check rules (from both engine defaults and content repo)
     _check_rule() {
         local kit_rule="$1"
-        [ -f "$kit_rule" ] || return
+        [ -f "$kit_rule" ] || return 0
         local name
         name=$(basename "$kit_rule")
         local installed="$CHECK_DIR/.claude/rules/$name"
@@ -808,7 +808,7 @@ if [ "$MODE" = "check" ]; then
     # Check skills (from both engine defaults and content repo)
     _check_skill() {
         local kit_skill="$1"
-        [ -f "$kit_skill" ] || return
+        [ -f "$kit_skill" ] || return 0
         local name
         name=$(basename "$(dirname "$kit_skill")")
         local installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
@@ -1656,7 +1656,7 @@ _REG_MCP_URLS=()
 
 _parse_registry() {
     local file="$1"
-    [ -f "$file" ] || return
+    [ -f "$file" ] || return 0
 
     local section="" kind="" name=""
     while IFS= read -r line || [ -n "$line" ]; do
@@ -1740,7 +1740,7 @@ _discover_profiles() {
     _PROFILE_DISPLAY_NAMES=()
     _PROFILE_DESCRIPTIONS=()
 
-    [ -d "$dir" ] || return
+    [ -d "$dir" ] || return 0
     for f in "$dir"/*.toml; do
         [ -f "$f" ] || continue
         _PROFILE_FILES+=("$f")
@@ -2095,12 +2095,12 @@ if [ "$MODE" = "manage" ]; then
     total_installed_tk=0
     _manage_scan_rule() {
         local kit_rule="$1"
-        [ -f "$kit_rule" ] || return
+        [ -f "$kit_rule" ] || return 0
         local name category tk pad sp
         name=$(basename "$kit_rule" .md)
         category=$(basename "$(dirname "$kit_rule")")
         # Dedup: content repo overrides engine defaults
-        for _sr in "${_seen_manage_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
+        for _sr in "${_seen_manage_rules[@]}"; do [ "$_sr" = "$name" ] && return 0; done
         _seen_manage_rules+=("$name")
         tk=$(count_tokens "$kit_rule")
         installed_rules+=("$name")
@@ -2139,7 +2139,7 @@ if [ "$MODE" = "manage" ]; then
     _seen_manage_skills=()
     _manage_scan_skill() {
         local kit_skill="$1"
-        [ -f "$kit_skill" ] || return
+        [ -f "$kit_skill" ] || return 0
         local name
         name=$(basename "$(dirname "$kit_skill")")
         for _ss in "${_seen_manage_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
@@ -2201,7 +2201,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_add_rules=()
             _manage_add_rule() {
                 local kit_rule="$1"
-                [ -f "$kit_rule" ] || return
+                [ -f "$kit_rule" ] || return 0
                 local name category
                 name=$(basename "$kit_rule" .md)
                 category=$(basename "$(dirname "$kit_rule")")
@@ -2232,7 +2232,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_add_skills=()
             _manage_add_skill() {
                 local kit_skill="$1"
-                [ -f "$kit_skill" ] || return
+                [ -f "$kit_skill" ] || return 0
                 local name
                 name=$(basename "$(dirname "$kit_skill")")
                 for _ss in "${_seen_add_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
@@ -2299,7 +2299,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_rm_rules=()
             _manage_rm_rule() {
                 local kit_rule="$1"
-                [ -f "$kit_rule" ] || return
+                [ -f "$kit_rule" ] || return 0
                 local name category target
                 name=$(basename "$kit_rule" .md)
                 category=$(basename "$(dirname "$kit_rule")")
@@ -2330,7 +2330,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_rm_skills=()
             _manage_rm_skill() {
                 local kit_skill="$1"
-                [ -f "$kit_skill" ] || return
+                [ -f "$kit_skill" ] || return 0
                 local name target
                 name=$(basename "$(dirname "$kit_skill")")
                 for _ss in "${_seen_rm_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
@@ -2414,7 +2414,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_sync_rules=()
             _manage_check_rule() {
                 local kit_rule="$1"
-                [ -f "$kit_rule" ] || return
+                [ -f "$kit_rule" ] || return 0
                 local name installed
                 name=$(basename "$kit_rule")
                 for _sr in "${_seen_sync_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
@@ -2445,7 +2445,7 @@ if [ "$MODE" = "manage" ]; then
             _seen_sync_skills=()
             _manage_check_skill() {
                 local kit_skill="$1"
-                [ -f "$kit_skill" ] || return
+                [ -f "$kit_skill" ] || return 0
                 local name installed
                 name=$(basename "$(dirname "$kit_skill")")
                 for _ss in "${_seen_sync_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
