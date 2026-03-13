@@ -49,6 +49,12 @@ for arg in "$@"; do
 done
 unset _prev
 
+# When invoked via wrapper (--kit-dir), ENGINE_DIR resolves to the temp
+# file location. Fix it to point at the actual engine submodule directory.
+if [ "$KIT_DIR" != "$ENGINE_DIR" ] && [ -d "$KIT_DIR/engine" ]; then
+    ENGINE_DIR="$KIT_DIR/engine"
+fi
+
 if [ "$MODE" != "install" ] && [ "$MODE" != "update" ] && [ "$MODE" != "check" ] && [ "$MODE" != "uninstall" ] && [ "$MODE" != "manage" ] && [ "$MODE" != "list" ]; then
     MODE="install"
 fi
@@ -584,7 +590,14 @@ show_logo() {
         echo "${G1}${BOLD}   ${KT_SHORT_NAME}${RESET}"
     fi
     echo ""
-    echo "${G6}${BOLD}   ─── A I   K I T ───${RESET}  ${DIM}v${KIT_VERSION}${RESET}"
+    # Space out the short name for the subtitle (e.g. "ABARIS" → "A B A R I S")
+    local _spaced=""
+    local _i
+    for ((_i=0; _i<${#KT_SHORT_NAME}; _i++)); do
+        [ $_i -gt 0 ] && _spaced+=" "
+        _spaced+="${KT_SHORT_NAME:$_i:1}"
+    done
+    echo "${G6}${BOLD}   ─── ${_spaced} ───${RESET}  ${DIM}v${KIT_VERSION}${RESET}"
     echo ""
 }
 
