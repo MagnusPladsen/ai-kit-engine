@@ -2079,14 +2079,20 @@ if [ "$MODE" = "manage" ]; then
     fi
     echo ""
 
-    # Scan installed rules with token counts
+    # Scan installed rules with token counts (both engine defaults and content repo)
     installed_rules=()
     installed_rule_labels=()
+    _seen_manage_rules=()
     total_installed_tk=0
-    for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-        [ -f "$kit_rule" ] || continue
+    _manage_scan_rule() {
+        local kit_rule="$1"
+        [ -f "$kit_rule" ] || return
+        local name category tk pad sp
         name=$(basename "$kit_rule" .md)
         category=$(basename "$(dirname "$kit_rule")")
+        # Dedup: content repo overrides engine defaults
+        for _sr in "${_seen_manage_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
+        _seen_manage_rules+=("$name")
         tk=$(count_tokens "$kit_rule")
         installed_rules+=("$name")
         if [ -f "$MANAGE_DIR/.claude/rules/$name.md" ] || [ -L "$MANAGE_DIR/.claude/rules/$name.md" ]; then
@@ -2103,21 +2109,52 @@ if [ "$MODE" = "manage" ]; then
             for ((p=0; p<pad; p++)); do sp+=" "; done
             installed_rule_labels+=("${DIM}○ ${name} (${category})${sp}~${tk} tk${RESET}")
         fi
-    done
+    }
+    # Content repo first (takes precedence for same-named files)
+    if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+        for kit_rule in "$KIT_DIR"/rules/*/*.md; do
+            _manage_scan_rule "$kit_rule"
+        done
+    fi
+    # Then engine defaults
+    if [ "$KT_DEFAULTS_RULES" = true ]; then
+        for kit_rule in "$ENGINE_DIR"/defaults/rules/*/*.md; do
+            _manage_scan_rule "$kit_rule"
+        done
+    fi
+    unset _seen_manage_rules
 
-    # Scan installed skills
+    # Scan installed skills (both engine defaults and content repo)
     installed_skills=()
     installed_skill_labels=()
-    for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-        [ -f "$kit_skill" ] || continue
+    _seen_manage_skills=()
+    _manage_scan_skill() {
+        local kit_skill="$1"
+        [ -f "$kit_skill" ] || return
+        local name
         name=$(basename "$(dirname "$kit_skill")")
+        for _ss in "${_seen_manage_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
+        _seen_manage_skills+=("$name")
         installed_skills+=("$name")
         if [ -f "$MANAGE_DIR/.claude/skills/$name/SKILL.md" ] || [ -L "$MANAGE_DIR/.claude/skills/$name/SKILL.md" ]; then
             installed_skill_labels+=("${GREEN}●${RESET} ${name} ${DIM}(0 tk)${RESET}")
         else
             installed_skill_labels+=("${DIM}○ ${name} (0 tk)${RESET}")
         fi
-    done
+    }
+    # Content repo first (takes precedence)
+    if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+        for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
+            _manage_scan_skill "$kit_skill"
+        done
+    fi
+    # Then engine defaults
+    if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+        for kit_skill in "$ENGINE_DIR"/defaults/skills/*/SKILL.md; do
+            _manage_scan_skill "$kit_skill"
+        done
+    fi
+    unset _seen_manage_skills
 
     # Display status
     echo "  ${BOLD}${WHITE}Rules${RESET}  ${DIM}(${GREEN}●${RESET}${DIM} installed  ○ available)${RESET}  ${TEAL}~${total_installed_tk} tk in context${RESET}"
@@ -2151,10 +2188,16 @@ if [ "$MODE" = "manage" ]; then
             CB_TOKENS=()
             CB_INSTALLED=()
             CB_HEAVY=()
-            for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-                [ -f "$kit_rule" ] || continue
+            # Scan rules from both engine defaults and content repo (deduplicated)
+            _seen_add_rules=()
+            _manage_add_rule() {
+                local kit_rule="$1"
+                [ -f "$kit_rule" ] || return
+                local name category
                 name=$(basename "$kit_rule" .md)
                 category=$(basename "$(dirname "$kit_rule")")
+                for _sr in "${_seen_add_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
+                _seen_add_rules+=("$name")
                 if [ ! -f "$MANAGE_DIR/.claude/rules/$name.md" ] && [ ! -L "$MANAGE_DIR/.claude/rules/$name.md" ]; then
                     add_items+=("$name (${category})")
                     add_sources+=("$kit_rule")
@@ -2163,10 +2206,28 @@ if [ "$MODE" = "manage" ]; then
                     CB_INSTALLED+=(0)
                     CB_HEAVY+=(0)
                 fi
-            done
-            for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-                [ -f "$kit_skill" ] || continue
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_rule in "$KIT_DIR"/rules/*/*.md; do
+                    _manage_add_rule "$kit_rule"
+                done
+            fi
+            if [ "$KT_DEFAULTS_RULES" = true ]; then
+                for kit_rule in "$ENGINE_DIR"/defaults/rules/*/*.md; do
+                    _manage_add_rule "$kit_rule"
+                done
+            fi
+            unset _seen_add_rules
+            # Scan skills from both engine defaults and content repo (deduplicated)
+            _seen_add_skills=()
+            _manage_add_skill() {
+                local kit_skill="$1"
+                [ -f "$kit_skill" ] || return
+                local name
                 name=$(basename "$(dirname "$kit_skill")")
+                for _ss in "${_seen_add_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
+                _seen_add_skills+=("$name")
                 if [ ! -f "$MANAGE_DIR/.claude/skills/$name/SKILL.md" ] && [ ! -L "$MANAGE_DIR/.claude/skills/$name/SKILL.md" ]; then
                     add_items+=("skill: $name")
                     add_sources+=("$kit_skill")
@@ -2175,7 +2236,19 @@ if [ "$MODE" = "manage" ]; then
                     CB_INSTALLED+=(0)
                     CB_HEAVY+=(0)
                 fi
-            done
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
+                    _manage_add_skill "$kit_skill"
+                done
+            fi
+            if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+                for kit_skill in "$ENGINE_DIR"/defaults/skills/*/SKILL.md; do
+                    _manage_add_skill "$kit_skill"
+                done
+            fi
+            unset _seen_add_skills
             if [ ${#add_items[@]} -eq 0 ]; then
                 echo ""
                 echo "  ${GREEN}✓${RESET} Everything is already installed!"
@@ -2213,10 +2286,16 @@ if [ "$MODE" = "manage" ]; then
             CB_TOKENS=()
             CB_INSTALLED=()
             CB_HEAVY=()
-            for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-                [ -f "$kit_rule" ] || continue
+            # Scan rules from both engine defaults and content repo (deduplicated)
+            _seen_rm_rules=()
+            _manage_rm_rule() {
+                local kit_rule="$1"
+                [ -f "$kit_rule" ] || return
+                local name category target
                 name=$(basename "$kit_rule" .md)
                 category=$(basename "$(dirname "$kit_rule")")
+                for _sr in "${_seen_rm_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
+                _seen_rm_rules+=("$name")
                 target="$MANAGE_DIR/.claude/rules/$name.md"
                 if [ -f "$target" ] || [ -L "$target" ]; then
                     rm_items+=("$name (${category})")
@@ -2225,10 +2304,28 @@ if [ "$MODE" = "manage" ]; then
                     CB_INSTALLED+=(1)
                     CB_HEAVY+=(0)
                 fi
-            done
-            for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-                [ -f "$kit_skill" ] || continue
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_rule in "$KIT_DIR"/rules/*/*.md; do
+                    _manage_rm_rule "$kit_rule"
+                done
+            fi
+            if [ "$KT_DEFAULTS_RULES" = true ]; then
+                for kit_rule in "$ENGINE_DIR"/defaults/rules/*/*.md; do
+                    _manage_rm_rule "$kit_rule"
+                done
+            fi
+            unset _seen_rm_rules
+            # Scan skills from both engine defaults and content repo (deduplicated)
+            _seen_rm_skills=()
+            _manage_rm_skill() {
+                local kit_skill="$1"
+                [ -f "$kit_skill" ] || return
+                local name target
                 name=$(basename "$(dirname "$kit_skill")")
+                for _ss in "${_seen_rm_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
+                _seen_rm_skills+=("$name")
                 target="$MANAGE_DIR/.claude/skills/$name/SKILL.md"
                 if [ -f "$target" ] || [ -L "$target" ]; then
                     rm_items+=("skill: $name")
@@ -2237,7 +2334,19 @@ if [ "$MODE" = "manage" ]; then
                     CB_INSTALLED+=(1)
                     CB_HEAVY+=(0)
                 fi
-            done
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
+                    _manage_rm_skill "$kit_skill"
+                done
+            fi
+            if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+                for kit_skill in "$ENGINE_DIR"/defaults/skills/*/SKILL.md; do
+                    _manage_rm_skill "$kit_skill"
+                done
+            fi
+            unset _seen_rm_skills
             if [ ${#rm_items[@]} -eq 0 ]; then
                 echo ""
                 echo "  ${DIM}Nothing installed to remove.${RESET}"
@@ -2292,9 +2401,15 @@ if [ "$MODE" = "manage" ]; then
             fi
             echo ""
             out_of_sync=0; in_sync=0
-            for kit_rule in "$KIT_DIR"/rules/*/*.md; do
-                [ -f "$kit_rule" ] || continue
+            # Check rules from both engine defaults and content repo (deduplicated)
+            _seen_sync_rules=()
+            _manage_check_rule() {
+                local kit_rule="$1"
+                [ -f "$kit_rule" ] || return
+                local name installed
                 name=$(basename "$kit_rule")
+                for _sr in "${_seen_sync_rules[@]}"; do [ "$_sr" = "$name" ] && return; done
+                _seen_sync_rules+=("$name")
                 installed="$CHECK_DIR/.claude/rules/$name"
                 if [ -f "$installed" ]; then
                     if diff -q "$kit_rule" "$installed" >/dev/null 2>&1 || [ -L "$installed" ]; then
@@ -2304,10 +2419,28 @@ if [ "$MODE" = "manage" ]; then
                         out_of_sync=$((out_of_sync + 1))
                     fi
                 fi
-            done
-            for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
-                [ -f "$kit_skill" ] || continue
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_rule in "$KIT_DIR"/rules/*/*.md; do
+                    _manage_check_rule "$kit_rule"
+                done
+            fi
+            if [ "$KT_DEFAULTS_RULES" = true ]; then
+                for kit_rule in "$ENGINE_DIR"/defaults/rules/*/*.md; do
+                    _manage_check_rule "$kit_rule"
+                done
+            fi
+            unset _seen_sync_rules
+            # Check skills from both engine defaults and content repo (deduplicated)
+            _seen_sync_skills=()
+            _manage_check_skill() {
+                local kit_skill="$1"
+                [ -f "$kit_skill" ] || return
+                local name installed
                 name=$(basename "$(dirname "$kit_skill")")
+                for _ss in "${_seen_sync_skills[@]}"; do [ "$_ss" = "$name" ] && return; done
+                _seen_sync_skills+=("$name")
                 installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
                 if [ -f "$installed" ]; then
                     if diff -q "$kit_skill" "$installed" >/dev/null 2>&1 || [ -L "$installed" ]; then
@@ -2317,7 +2450,19 @@ if [ "$MODE" = "manage" ]; then
                         out_of_sync=$((out_of_sync + 1))
                     fi
                 fi
-            done
+            }
+            # Content repo first (takes precedence)
+            if [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+                for kit_skill in "$KIT_DIR"/skills/*/SKILL.md; do
+                    _manage_check_skill "$kit_skill"
+                done
+            fi
+            if [ "$KT_DEFAULTS_SKILLS" = true ] && [ -d "$ENGINE_DIR/defaults/skills" ]; then
+                for kit_skill in "$ENGINE_DIR"/defaults/skills/*/SKILL.md; do
+                    _manage_check_skill "$kit_skill"
+                done
+            fi
+            unset _seen_sync_skills
             if [ "$out_of_sync" -eq 0 ]; then
                 echo "  ${GREEN}✓${RESET} All ${in_sync} installed files are in sync."
             else
