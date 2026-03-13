@@ -1,0 +1,24 @@
+# kit.toml — Single-stack example
+# Solo developer, Go only, minimal config, custom skills only.
+
+[branding]
+name = "Go Kit"
+short_name = "GO-KIT"
+tagline = "AI development standards for Go projects"
+watermark = "go-kit"
+config_dir = ".go-kit"
+ascii_art_file = "branding/ascii.txt"
+
+[settings]
+default_theme = "Nord"
+
+[stacks.go]
+name = "Go"
+detect = ["go.mod"]
+rules_dir = "go"
+
+[defaults]
+rules = true
+skills = false
+registry = true
+profiles = false

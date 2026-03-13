@@ -1,0 +1,39 @@
+# kit.toml — Startup example
+# Small team with React frontend and Python backend.
+
+[branding]
+name = "Acme Dev Kit"
+short_name = "ACME"
+tagline = "AI-powered development standards for Acme"
+watermark = "acme-dev-kit"
+config_dir = ".acme"
+ascii_art_file = "branding/ascii.txt"
+
+[settings]
+default_theme = "Acme Blue"
+
+[[custom_themes]]
+name = "Acme Blue"
+lime = [66, 133, 244]
+teal = [52, 168, 235]
+gold = [251, 188, 4]
+
+[stacks.react]
+name = "React / Next.js"
+detect = ["package.json", "tsconfig.json"]
+rules_dir = "react"
+
+[stacks.python]
+name = "Python / FastAPI / Django"
+detect = ["requirements.txt", "pyproject.toml", "Pipfile"]
+rules_dir = "python"
+
+[stacks.integrations]
+name = "Integrations (GitHub)"
+rules_dir = "integrations"
+
+[defaults]
+rules = true
+skills = true
+registry = true
+profiles = true

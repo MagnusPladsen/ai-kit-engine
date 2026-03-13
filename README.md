@@ -96,7 +96,7 @@ paths = [
 ]
 ```
 
-See [docs/REFERENCE.md](docs/REFERENCE.md) for the full field reference, example configs, and defaults system details.
+See [docs/REFERENCE.md](docs/REFERENCE.md) for the full field reference and defaults system details, or browse [docs/examples/](docs/examples/) for complete ready-to-copy kit setups (minimal, startup, enterprise, single-stack).
 
 ## Content repo structure
 

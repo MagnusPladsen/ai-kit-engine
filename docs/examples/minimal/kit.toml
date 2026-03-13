@@ -1,0 +1,10 @@
+# kit.toml — Minimal example
+# Just branding, everything else uses defaults.
+
+[branding]
+name = "My Kit"
+short_name = "MY-KIT"
+tagline = "My personal AI development kit"
+watermark = "my-kit"
+config_dir = ".my-kit"
+ascii_art_file = "branding/ascii.txt"

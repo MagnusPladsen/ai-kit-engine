@@ -1,0 +1,33 @@
+# registry.toml — Contoso Engineering Kit plugins & MCPs
+
+# ── Plugins ──────────────────────────────────────────────────────
+
+[plugins.coderabbit]
+
+[plugins.commit-commands]
+tokens = 500
+
+[plugins.superpowers]
+tokens = 1500
+heavy = true
+
+[plugins.ui-ux-pro-max]
+tokens = 2800
+heavy = true
+
+[plugins.typescript-lsp]
+stack = "react"
+
+[plugins.csharp-lsp]
+stack = "dotnet"
+
+# ── MCP Servers ──────────────────────────────────────────────────
+
+[mcps.context7]
+url = "npx:-y:@upstash/context7-mcp"
+
+[mcps.atlassian]
+url = "https://mcp.atlassian.com/v1/mcp"
+
+[mcps.figma]
+url = "https://mcp.figma.com/mcp"

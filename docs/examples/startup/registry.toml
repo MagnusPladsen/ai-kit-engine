@@ -1,0 +1,20 @@
+# registry.toml — Acme Dev Kit plugins & MCPs
+
+[plugins.coderabbit]
+
+[plugins.commit-commands]
+tokens = 500
+
+[plugins.superpowers]
+tokens = 1500
+heavy = true
+
+[plugins.ui-ux-pro-max]
+tokens = 2800
+heavy = true
+
+[plugins.typescript-lsp]
+stack = "react"
+
+[mcps.context7]
+url = "npx:-y:@upstash/context7-mcp"

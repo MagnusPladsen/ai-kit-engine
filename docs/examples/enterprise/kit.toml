@@ -1,0 +1,104 @@
+# kit.toml — Enterprise example
+# Full configuration with all stacks, multiple themes, custom symlinks, and wrapper files.
+
+[branding]
+name = "Contoso Engineering Kit"
+short_name = "CONTOSO"
+tagline = "Enterprise AI development standards for Contoso"
+watermark = "contoso-eng-kit"
+config_dir = ".contoso"
+ascii_art_file = "branding/ascii.txt"
+
+[settings]
+default_theme = "Contoso Blue"
+
+[defaults]
+rules = true
+skills = true
+registry = true
+profiles = true
+
+# ── Custom Themes ────────────────────────────────────────────────
+
+[[custom_themes]]
+name = "Contoso Blue"
+lime = [0, 120, 212]
+teal = [80, 180, 220]
+gold = [255, 185, 0]
+
+[[custom_themes]]
+name = "Contoso Dark"
+lime = [100, 200, 160]
+teal = [140, 170, 220]
+gold = [230, 190, 80]
+
+# ── Stacks ───────────────────────────────────────────────────────
+
+[stacks.react]
+name = "React / Next.js / React Native"
+detect = ["package.json", "tsconfig.json"]
+rules_dir = "react"
+
+[stacks.dotnet]
+name = ".NET / C#"
+detect = ["*.csproj", "*.sln"]
+rules_dir = "dotnet"
+
+[stacks.python]
+name = "Python / FastAPI / Django"
+detect = ["requirements.txt", "pyproject.toml", "Pipfile"]
+rules_dir = "python"
+
+[stacks.go]
+name = "Go"
+detect = ["go.mod"]
+rules_dir = "go"
+
+[stacks.integrations]
+name = "Integrations (GitHub, Jira, Azure DevOps)"
+rules_dir = "integrations"
+
+# ── Wrapper Files ────────────────────────────────────────────────
+
+[wrapper_files]
+items = ["CLAUDE.md", "COPILOT.md", "CURSOR.md", "CODEX.md", "GEMINI.md"]
+
+# ── Global Symlinks ──────────────────────────────────────────────
+
+[global_symlinks.claude]
+name = "Claude Code"
+cli = "claude"
+paths = [
+    { src = "CLAUDE.md", dst = "~/.claude/CLAUDE.md" },
+    { src = ".claude/rules/", dst = "~/.claude/rules/" },
+    { src = ".claude/skills/", dst = "~/.claude/skills/" },
+]
+
+[global_symlinks.gemini]
+name = "Gemini CLI / Antigravity"
+cli = "gemini"
+alt_cli = "antigravity"
+paths = [
+    { src = "GEMINI.md", dst = "~/.gemini/GEMINI.md" },
+    { src = "AGENT.md", dst = "~/.gemini/AGENT.md" },
+]
+
+[global_symlinks.codex]
+name = "Codex CLI"
+cli = "codex"
+paths = [
+    { src = "CODEX.md", dst = "~/.codex/AGENTS.md" },
+    { src = "AGENT.md", dst = "~/.codex/AGENT.md" },
+]
+
+[global_symlinks.windsurf]
+name = "Windsurf"
+paths = [
+    { src = "AGENT.md", dst = "~/.codeium/windsurf/memories/global_rules.md" },
+]
+
+[global_symlinks.continue]
+name = "Continue.dev"
+paths = [
+    { src = ".claude/rules/", dst = "~/.continue/rules/" },
+]

@@ -253,7 +253,16 @@ mkdir -p "$REPO_DIR/profiles"
 touch "$REPO_DIR/profiles/.gitkeep"
 
 mkdir -p "$REPO_DIR/branding"
-touch "$REPO_DIR/branding/.gitkeep"
+
+# Generate default ASCII art for the kit's short name
+cat > "$REPO_DIR/branding/ascii.txt" << 'ASCII_ART'
+███╗   ███╗ ██╗   ██╗   ██╗  ██╗ ██╗ ████████╗
+████╗ ████║ ╚██╗ ██╔╝   ██║ ██╔╝ ██║ ╚══██╔══╝
+██╔████╔██║  ╚████╔╝    █████╔╝  ██║    ██║
+██║╚██╔╝██║   ╚██╔╝     ██╔═██╗  ██║    ██║
+██║ ╚═╝ ██║    ██║      ██║  ██╗ ██║    ██║
+╚═╝     ╚═╝    ╚═╝      ╚═╝  ╚═╝ ╚═╝    ╚═╝
+ASCII_ART
 
 success "Directory structure created"
 
@@ -415,5 +424,8 @@ printf '  %s4.%s  Customize %sbranding/ascii.txt%s with your ASCII art\n' "$LIME
 printf '  %s5.%s  Edit %skit.toml%s to fine-tune configuration\n' "$LIME" "$RESET" "$BOLD" "$RESET"
 printf '  %s6.%s  Test the installer: %sbash install.sh%s\n' "$LIME" "$RESET" "$BOLD" "$RESET"
 printf '  %s7.%s  Push to your remote and share with your team!\n\n' "$LIME" "$RESET"
+
+printf '  %sTip:%s Edit %sbranding/ascii.txt%s to customize your logo.\n' "$GOLD" "$RESET" "$BOLD" "$RESET"
+printf '  %s     Use https://patorjk.com/software/taag/ (font: ANSI Shadow) to generate block text.%s\n\n' "$DIM" "$RESET"
 
 printf '  %sDocumentation:%s https://github.com/MagnusPladsen/ai-kit-engine\n\n' "$DIM" "$RESET"

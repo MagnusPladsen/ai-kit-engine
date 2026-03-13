@@ -201,6 +201,7 @@ short_name = "${config.shortName}"
 config_dir = "${config.configDir}"
 watermark = "${config.watermark}"
 tagline = "${config.tagline}"
+ascii_art_file = "branding/ascii.txt"
 
 [theme]
 ${config.customTheme ? `custom = true\n# TODO: Define custom theme colors` : `custom = false`}
@@ -276,7 +277,8 @@ function printSummary(config, targetDir) {
   console.log(`    ${dim("├──")} skills/`);
   console.log(`    ${dim("├──")} profiles/`);
   console.log(`    ${dim("├──")} plugins/`);
-  console.log(`    ${dim("└──")} defaults/`);
+  console.log(`    ${dim("├──")} defaults/`);
+  console.log(`    ${dim("└──")} branding/`);
   console.log();
 }
 
@@ -380,6 +382,7 @@ async function runInit() {
       "profiles",
       "plugins",
       "defaults",
+      "branding",
     ];
     for (const dir of dirs) {
       const fullPath = path.join(targetDir, dir);
@@ -428,6 +431,18 @@ async function runInit() {
       const gitkeepPath = path.join(targetDir, dir, ".gitkeep");
       fs.writeFileSync(gitkeepPath, "");
     }
+
+    // Generate default ASCII art for the kit's short name
+    const asciiArt = `███╗   ███╗ ██╗   ██╗   ██╗  ██╗ ██╗ ████████╗
+████╗ ████║ ╚██╗ ██╔╝   ██║ ██╔╝ ██║ ╚══██╔══╝
+██╔████╔██║  ╚████╔╝    █████╔╝  ██║    ██║
+██║╚██╔╝██║   ╚██╔╝     ██╔═██╗  ██║    ██║
+██║ ╚═╝ ██║    ██║      ██║  ██╗ ██║    ██║
+╚═╝     ╚═╝    ╚═╝      ╚═╝  ╚═╝ ╚═╝    ╚═╝
+`;
+    const asciiArtPath = path.join(targetDir, "branding", "ascii.txt");
+    fs.writeFileSync(asciiArtPath, asciiArt);
+    console.log(`  ${green("+")} ${dim("write")} ${config.repoDir}/branding/ascii.txt`);
 
     // ── Git init ───────────────────────────────────────────────────────────
 
@@ -481,6 +496,9 @@ async function runInit() {
     console.log(`    ${yellow("4.")} Add profiles to ${cyan("profiles/")} for personas`);
     console.log(`    ${yellow("5.")} Edit ${cyan("kit.toml")} to fine-tune configuration`);
     console.log(`    ${yellow("6.")} Run ${cyan("bash install.sh")} to test the installer`);
+    console.log();
+    console.log(`  ${yellow("Tip:")} Edit ${bold("branding/ascii.txt")} to customize your logo.`);
+    console.log(`  ${dim("     Use https://patorjk.com/software/taag/ (font: ANSI Shadow) to generate block text.")}`);
     console.log();
     console.log(
       `  ${dim("Documentation:")} https://github.com/MagnusPladsen/ai-kit-engine`
