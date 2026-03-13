@@ -820,7 +820,11 @@ if [ "$MODE" = "check" ]; then
         done
     done
 
-    if [ "$out_of_sync" -eq 0 ]; then
+    if [ "$in_sync" -eq 0 ] && [ "$out_of_sync" -eq 0 ]; then
+        echo "  ${DIM}No installed rules or skills found.${RESET}"
+        echo "  ${DIM}Run: bash install.sh${RESET}"
+        exit 1
+    elif [ "$out_of_sync" -eq 0 ]; then
         echo "  ${GREEN}✓${RESET} All ${in_sync} installed files are in sync."
     else
         echo ""
@@ -970,6 +974,33 @@ if [ "$MODE" = "uninstall" ]; then
             fi
         fi
     done
+
+    # Remove plugins and MCP servers (if claude CLI is available)
+    if command -v claude >/dev/null 2>&1; then
+        # Uninstall plugins from registry
+        for _pi in "${!_REG_PLUGIN_NAMES[@]}"; do
+            _pn="${_REG_PLUGIN_NAMES[$_pi]}"
+            echo -n "  Removing plugin ${WHITE}${_pn}${RESET}... "
+            if claude plugin remove "$_pn" >/dev/null 2>&1; then
+                echo "${GREEN}✓${RESET}"
+                removed=$((removed + 1))
+            else
+                echo "${DIM}(not installed)${RESET}"
+            fi
+        done
+        # Remove MCP servers from registry
+        for _mi in "${!_REG_MCP_NAMES[@]}"; do
+            _mn="${_REG_MCP_NAMES[$_mi]}"
+            echo -n "  Removing MCP server ${WHITE}${_mn}${RESET}... "
+            if claude mcp remove "$_mn" >/dev/null 2>&1; then
+                echo "${GREEN}✓${RESET}"
+                removed=$((removed + 1))
+            else
+                echo "${DIM}(not installed)${RESET}"
+            fi
+        done
+        echo ""
+    fi
 
     # Remove global symlinks if this was a global install
     if [ "$UNINST_DIR" = "$HOME/$KT_CONFIG_DIR" ]; then
