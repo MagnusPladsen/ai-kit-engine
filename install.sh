@@ -747,7 +747,16 @@ if [ -n "$_last_ver" ] && [ "$_last_ver" != "$KIT_VERSION" ] && [ -f "$KIT_DIR/C
     show_logo
 fi
 config_write "last_version" "$KIT_VERSION"
-unset _last_ver _show _ver
+
+# ─── Engine update notification ──────────────────────────────────────────────
+ENGINE_VERSION="$(cat "$ENGINE_DIR/VERSION" 2>/dev/null || echo "unknown")"
+_last_engine_ver=$(config_read "last_engine_version")
+if [ -n "$_last_engine_ver" ] && [ "$_last_engine_ver" != "$ENGINE_VERSION" ] && [ "$IS_TTY" = true ]; then
+    echo "  ${TEAL}⬆${RESET}  Engine updated: ${DIM}v${_last_engine_ver}${RESET} → ${BOLD}${LIME}v${ENGINE_VERSION}${RESET}"
+    echo ""
+fi
+config_write "last_engine_version" "$ENGINE_VERSION"
+unset _last_ver _show _ver _last_engine_ver
 
 # ─── Check mode: verify sync status and exit ─────────────────────────────────
 
