@@ -190,12 +190,21 @@ engine/defaults/
 │                                   # MCPs: context7, atlassian, figma
 ├── rules/
 │   ├── shared/
+│   │   ├── code-quality.md
 │   │   ├── commit-conventions.md
 │   │   ├── database.md
+│   │   ├── dependency-management.md
+│   │   ├── design-consistency.md
 │   │   ├── logging.md
+│   │   ├── minimal-diff.md
+│   │   ├── naming-conventions.md
 │   │   ├── no-auto-push.md
+│   │   ├── no-phantom-code.md
 │   │   ├── plan-refinement.md
-│   │   └── security.md
+│   │   ├── pr-conventions.md
+│   │   ├── reusable-code.md
+│   │   ├── security.md
+│   │   └── testing-conventions.md
 │   ├── react/
 │   │   ├── accessibility.md
 │   │   ├── api-integration.md
@@ -219,13 +228,16 @@ engine/defaults/
 │       └── jira.md
 ├── skills/
 │   ├── add-migration/SKILL.md
+│   ├── changelog/SKILL.md
 │   ├── commit/SKILL.md
 │   ├── create-pr/SKILL.md
 │   ├── debug/SKILL.md
 │   ├── document/SKILL.md
 │   ├── new-issue/SKILL.md
+│   ├── onboard/SKILL.md
 │   ├── refactor/SKILL.md
 │   ├── review/SKILL.md
+│   ├── test/SKILL.md
 │   └── validate-architecture/SKILL.md
 └── profiles/
     ├── minimal.toml                # Shared rules + commit skill
