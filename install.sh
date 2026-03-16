@@ -1973,19 +1973,10 @@ if [ "$FLAG_ACTION" = false ] && [ "${SKIP_MENU:-false}" != true ]; then
     while true; do
         step_header "What do you want to do?" 1
 
-        # Show team config banner if detected
-        if [ "$HAS_TEAM_CONFIG" = true ]; then
-            echo "  ${LIME}${BOLD}▸ Team config found${RESET}  ${DIM}(.${KT_WATERMARK}-config)${RESET}"
-            echo "    ${DIM}${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins${RESET}"
-            echo ""
-        fi
-
         if [ "$HAS_TEAM_CONFIG" = true ]; then
             single_select "Select an action:" \
-                "★ Install from team config" "— Apply .${KT_WATERMARK}-config (${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins)" \
-                "Install (customize)" "— Use team config as defaults, then tweak" \
-                "Install (fresh)" "— Ignore config, pick everything yourself" \
-                "Delete team config" "— Remove .${KT_WATERMARK}-config from this project" \
+                "★ Team config" "— Install from .${KT_WATERMARK}-config (${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins)" \
+                "Install" "— Fresh install (pick everything yourself)" \
                 "Manage" "— View, add, remove, update, or check installed items" \
                 "Uninstall" "— Remove all kit files (restores backups)" \
                 "Exit" "— Quit installer"
@@ -2006,41 +1997,57 @@ if [ "$FLAG_ACTION" = false ] && [ "${SKIP_MENU:-false}" != true ]; then
     done
 
     case "$SELECTED_ITEM" in
-        "★ Install from team config")
-            USE_TEAM_CONFIG=true
-            _apply_team_config
-            MODE="install"
-            ;;
-        "Install (customize)")
-            _apply_team_config
-            PROFILE_NAME="Team Config"
-            PROFILE_RULES=("${_tc_rules[@]}")
-            PROFILE_SKILLS=("${_tc_skills[@]}")
-            PROFILE_PLUGINS=("${_tc_plugins[@]}")
-            MODE="install"
-            ;;
-        "Install (fresh)"|"Install") MODE="install" ;;
-        "Delete team config")
-            _tc_path="$(pwd)/.${KT_WATERMARK}-config"
+        "★ Team config")
+            # Sub-menu for team config options
+            step_header "Team Config" 2
+            echo "  ${LIME}${BOLD}▸ .${KT_WATERMARK}-config${RESET}"
+            echo "    ${DIM}${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins${RESET}"
             echo ""
-            echo "  ${BOLD}${WHITE}Delete team config?${RESET}"
-            echo "  ${DIM}${_tc_path}${RESET}"
-            echo ""
-            single_select "Are you sure?" \
-                "Yes, delete it" "— Remove .${KT_WATERMARK}-config" \
-                "Cancel" "— Keep the file"
-            if [ "$SELECTED_ITEM" = "Yes, delete it" ]; then
-                rm -f "$_tc_path"
-                HAS_TEAM_CONFIG=false
-                echo ""
-                echo "  ${GREEN}✓${RESET} Team config deleted."
-                echo ""
-                echo "  ${DIM}Press any key to continue...${RESET}"
-                read -rsn1
-            fi
-            BACK_TO_ACTION=true
-            continue
+            single_select "What would you like to do?" \
+                "Install as-is" "— Apply team config exactly" \
+                "Customize" "— Use as defaults, then tweak selections" \
+                "Delete config" "— Remove .${KT_WATERMARK}-config from this project" \
+                "Back" "— Return to main menu"
+
+            case "$SELECTED_ITEM" in
+                "Install as-is")
+                    USE_TEAM_CONFIG=true
+                    _apply_team_config
+                    MODE="install"
+                    ;;
+                "Customize")
+                    _apply_team_config
+                    PROFILE_NAME="Team Config"
+                    PROFILE_RULES=("${_tc_rules[@]}")
+                    PROFILE_SKILLS=("${_tc_skills[@]}")
+                    PROFILE_PLUGINS=("${_tc_plugins[@]}")
+                    MODE="install"
+                    ;;
+                "Delete config")
+                    _tc_path="$(pwd)/.${KT_WATERMARK}-config"
+                    echo ""
+                    single_select "Are you sure?" \
+                        "Yes, delete it" "— Remove .${KT_WATERMARK}-config" \
+                        "Cancel" "— Keep the file"
+                    if [ "$SELECTED_ITEM" = "Yes, delete it" ]; then
+                        rm -f "$_tc_path"
+                        HAS_TEAM_CONFIG=false
+                        echo ""
+                        echo "  ${GREEN}✓${RESET} Team config deleted."
+                        echo ""
+                        echo "  ${DIM}Press any key to continue...${RESET}"
+                        read -rsn1
+                    fi
+                    BACK_TO_ACTION=true
+                    continue
+                    ;;
+                "Back"|"__BACK__")
+                    BACK_TO_ACTION=true
+                    continue
+                    ;;
+            esac
             ;;
+        "Install") MODE="install" ;;
         "Manage") MODE="manage" ;;
         "Uninstall") MODE="uninstall" ;;
         "Exit"|"__BACK__") exit 0 ;;
