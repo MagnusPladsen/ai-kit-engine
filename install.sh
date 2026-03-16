@@ -87,7 +87,7 @@ _CT_TEAL=()
 _CT_GOLD=()
 
 # Wrapper files
-_WRAPPER_FILES=("CLAUDE.md" "COPILOT.md" "CURSOR.md" "CODEX.md" "GEMINI.md")
+_WRAPPER_FILES=("CLAUDE.md" "COPILOT.md" "CURSOR.md" "CODEX.md" "GEMINI.md" "OPENCODE.md" "CRUSH.md")
 
 # Global symlinks — parallel arrays
 _SYM_KEYS=()
@@ -1026,7 +1026,9 @@ if [ "$MODE" = "uninstall" ]; then
         done
         # Other tool symlinks
         for f in "$HOME/.gemini/GEMINI.md" "$HOME/.codex/AGENTS.md" \
-                 "$HOME/.codeium/windsurf/memories/global_rules.md"; do
+                 "$HOME/.codeium/windsurf/memories/global_rules.md" \
+                 "$HOME/.config/opencode/AGENTS.md" \
+                 "$HOME/.config/crush/CRUSH.md"; do
             if [ -L "$f" ]; then
                 link_target=$(readlink "$f")
                 if echo "$link_target" | grep -q "$KT_CONFIG_DIR" 2>/dev/null; then

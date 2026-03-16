@@ -33,7 +33,7 @@ name = "Integrations (Bitbucket, Azure DevOps, GitHub, Jira)"
 rules_dir = "integrations"
 
 [wrapper_files]
-items = ["CLAUDE.md", "COPILOT.md", "CURSOR.md", "CODEX.md", "GEMINI.md"]
+items = ["CLAUDE.md", "COPILOT.md", "CURSOR.md", "CODEX.md", "GEMINI.md", "OPENCODE.md", "CRUSH.md"]
 
 [global_symlinks.claude]
 name = "Claude Code"
@@ -65,6 +65,23 @@ paths = [
 name = "Windsurf"
 paths = [
     { src = "AGENT.md", dst = "~/.codeium/windsurf/memories/global_rules.md" },
+]
+
+[global_symlinks.opencode]
+name = "OpenCode"
+cli = "opencode"
+paths = [
+    { src = "OPENCODE.md", dst = "~/.config/opencode/AGENTS.md" },
+    { src = "AGENT.md", dst = "~/.config/opencode/AGENT.md" },
+]
+
+[global_symlinks.crush]
+name = "Crush"
+cli = "crush"
+paths = [
+    { src = "CRUSH.md", dst = "~/.config/crush/CRUSH.md" },
+    { src = ".claude/rules/", dst = "~/.config/crush/rules/" },
+    { src = ".claude/skills/", dst = "~/.config/crush/skills/" },
 ]
 
 [global_symlinks.continue]

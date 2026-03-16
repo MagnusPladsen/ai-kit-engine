@@ -402,6 +402,8 @@ paths = [
 | Claude Code | `~/.claude/` | Yes |
 | Gemini CLI | `~/.gemini/` | Yes |
 | Codex CLI | `~/.codex/` | Yes |
+| OpenCode | `~/.config/opencode/` | Yes |
+| Crush | `~/.config/crush/` | Yes |
 | Windsurf | `~/.codeium/windsurf/memories/` | Yes |
 | Continue.dev | `~/.continue/rules/` | Yes |
 | GitHub Copilot | `.github/copilot-instructions.md` | Project only |

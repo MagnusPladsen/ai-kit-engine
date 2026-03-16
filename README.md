@@ -48,7 +48,7 @@ bash install.sh
 - **Fuzzy search** -- press `/` in any menu to filter items
 - **Token budget estimates** -- color-coded token counts for every rule and skill
 - **File safety** -- backups before overwrites, watermark tracking, clean uninstall with restore
-- **Multi-tool support** -- one install configures Claude, Gemini, Codex, Windsurf, Continue.dev, Copilot, and Cursor
+- **Multi-tool support** -- one install configures Claude, Gemini, Codex, OpenCode, Crush, Windsurf, Continue.dev, Copilot, and Cursor
 - **Global + project install modes** -- project mode for repos, global mode for symlinked central config
 - **Manage mode** -- re-run to add, remove, or update individual items
 - **Dry run mode** -- preview changes before writing anything
