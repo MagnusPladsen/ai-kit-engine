@@ -118,7 +118,7 @@ paths = [
 
 ## Wrapper `install.sh` explained
 
-The wrapper script is intentionally minimal (~15 lines). Here is what each section does:
+The wrapper script handles submodule bootstrapping, update prompts, and delegation to the engine. Here is what each section does:
 
 ```bash
 #!/bin/bash
@@ -138,26 +138,51 @@ if [ ! -f "$ENGINE" ]; then
     fi
 fi
 
-# Copy engine to temp file, then update submodule in background.
-# This avoids a race condition where the background git pull replaces
-# engine/install.sh while bash is still reading it (bash reads lazily).
+# Check for engine updates (unless --no-update-check was passed)
+if [ "${1:-}" != "--no-update-check" ]; then
+    _current_sha="$(git -C "$SCRIPT_DIR/engine" rev-parse HEAD 2>/dev/null)"
+    git -C "$SCRIPT_DIR" submodule update --remote engine >/dev/null 2>&1 || true
+    _latest_sha="$(git -C "$SCRIPT_DIR/engine" rev-parse HEAD 2>/dev/null)"
+
+    if [ "$_current_sha" != "$_latest_sha" ]; then
+        _old_ver="$(git -C "$SCRIPT_DIR/engine" show "$_current_sha:VERSION" 2>/dev/null || echo "?")"
+        _new_ver="$(cat "$SCRIPT_DIR/engine/VERSION" 2>/dev/null || echo "?")"
+        echo ""
+        echo "  ⬆ Engine update available: v${_old_ver} → v${_new_ver}"
+        echo ""
+        echo "  1) Update now (restart with new version)"
+        echo "  2) Skip (use next time)"
+        echo ""
+        printf "  Choice [1/2]: "
+        read -rsn1 _choice
+        echo ""
+        if [ "$_choice" = "1" ]; then
+            echo "  Restarting with v${_new_ver}..."
+            exec bash "$SCRIPT_DIR/install.sh" --no-update-check "$@"
+        else
+            git -C "$SCRIPT_DIR/engine" checkout "$_current_sha" >/dev/null 2>&1 || true
+        fi
+    fi
+fi
+
+_args=()
+for _a in "$@"; do [ "$_a" != "--no-update-check" ] && _args+=("$_a"); done
+
+# Copy engine to temp file to avoid race conditions with lazy bash reads
 _ENGINE_TMP="$(mktemp)"
 cp "$ENGINE" "$_ENGINE_TMP"
 trap 'rm -f "$_ENGINE_TMP"' EXIT
 
-# Background update -- fetched for NEXT run, not this one
-git -C "$SCRIPT_DIR" submodule update --remote engine 2>/dev/null &
-
-exec bash "$_ENGINE_TMP" --kit-dir "$SCRIPT_DIR" "$@"
+exec bash "$_ENGINE_TMP" --kit-dir "$SCRIPT_DIR" "${_args[@]}"
 ```
 
 ### Section breakdown
 
 **Auto-init submodule:** On first clone, users may not have run `git submodule update`. The wrapper handles this automatically.
 
-**Copy to temp file:** Bash reads scripts lazily. If the background `git submodule update` replaces `engine/install.sh` mid-execution, the running script would break. Copying to a temp file prevents this.
+**Update check:** Fetches the latest engine from the remote. If a new version is available, prompts the user to update now (restarts the script with the new engine) or skip (reverts to the current version for this run).
 
-**Background update:** The engine updates silently in the background. Users get the latest version on their next run without waiting.
+**Copy to temp file:** Bash reads scripts lazily. Copying to a temp file prevents issues if the engine file changes mid-execution.
 
 **`--kit-dir` flag:** Tells the engine where to find `kit.toml`, rules, skills, and other content. All other flags are passed through.
 
