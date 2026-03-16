@@ -231,41 +231,11 @@ if [ ! -f "$ENGINE" ]; then
     fi
 fi
 
-# Check for engine updates (unless --no-update-check was passed)
-if [ "\${1:-}" != "--no-update-check" ]; then
-    _current_sha="$(git -C "$SCRIPT_DIR/engine" rev-parse HEAD 2>/dev/null)"
-    git -C "$SCRIPT_DIR" submodule update --remote engine >/dev/null 2>&1 || true
-    _latest_sha="$(git -C "$SCRIPT_DIR/engine" rev-parse HEAD 2>/dev/null)"
-
-    if [ "$_current_sha" != "$_latest_sha" ]; then
-        _old_ver="$(git -C "$SCRIPT_DIR/engine" show "$_current_sha:VERSION" 2>/dev/null || echo "?")"
-        _new_ver="$(cat "$SCRIPT_DIR/engine/VERSION" 2>/dev/null || echo "?")"
-        echo ""
-        echo "  ⬆ Engine update available: v\${_old_ver} → v\${_new_ver}"
-        echo ""
-        echo "  1) Update now (restart with new version)"
-        echo "  2) Skip (use next time)"
-        echo ""
-        printf "  Choice [1/2]: "
-        read -rsn1 _choice
-        echo ""
-        if [ "$_choice" = "1" ]; then
-            echo "  Restarting with v\${_new_ver}..."
-            exec bash "$SCRIPT_DIR/install.sh" --no-update-check "$@"
-        else
-            git -C "$SCRIPT_DIR/engine" checkout "$_current_sha" >/dev/null 2>&1 || true
-        fi
-    fi
-fi
-
-_args=()
-for _a in "$@"; do [ "$_a" != "--no-update-check" ] && _args+=("$_a"); done
-
 _ENGINE_TMP="$(mktemp)"
 cp "$ENGINE" "$_ENGINE_TMP"
 trap 'rm -f "$_ENGINE_TMP"' EXIT
 
-exec bash "$_ENGINE_TMP" --kit-dir "$SCRIPT_DIR" "\${_args[@]}"
+exec bash "$_ENGINE_TMP" --kit-dir "$SCRIPT_DIR" "$@"
 `;
 }
 

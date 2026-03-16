@@ -1929,6 +1929,38 @@ if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ]; then
     unset _loading_frames _loading_msgs _msg _f
 fi
 
+# ─── Check for engine updates (wrapper mode only) ───────────────────────────
+if [ "$FLAG_ACTION" = false ] && [ "$IS_TTY" = true ] && [ "$KIT_DIR" != "$ENGINE_DIR" ]; then
+    _current_sha="$(git -C "$KIT_DIR/engine" rev-parse HEAD 2>/dev/null || echo "")"
+    if [ -n "$_current_sha" ]; then
+        git -C "$KIT_DIR" submodule update --remote engine >/dev/null 2>&1 || true
+        _latest_sha="$(git -C "$KIT_DIR/engine" rev-parse HEAD 2>/dev/null || echo "")"
+        if [ -n "$_latest_sha" ] && [ "$_current_sha" != "$_latest_sha" ]; then
+            _old_ver="$(git -C "$KIT_DIR/engine" show "$_current_sha:VERSION" 2>/dev/null || echo "?")"
+            _new_ver="$(cat "$KIT_DIR/engine/VERSION" 2>/dev/null || echo "?")"
+            echo ""
+            echo "  ${LIME}${BOLD}⬆ Engine update available${RESET}  ${DIM}v${_old_ver} → v${_new_ver}${RESET}"
+            echo ""
+            single_select "What would you like to do?" \
+                "Update now" "— Restart with engine v${_new_ver}" \
+                "Skip" "— Use current version, update next time"
+            if [ "$SELECTED_ITEM" = "Update now" ]; then
+                echo ""
+                echo "  ${TEAL}Restarting with v${_new_ver}...${RESET}"
+                sleep 0.3
+                # Re-copy updated engine to temp and re-exec
+                _ENGINE_TMP_NEW="$(mktemp)"
+                cp "$KIT_DIR/engine/install.sh" "$_ENGINE_TMP_NEW"
+                exec bash "$_ENGINE_TMP_NEW" --kit-dir "$KIT_DIR" "$@"
+            else
+                # Revert to current version for this run
+                git -C "$KIT_DIR/engine" checkout "$_current_sha" >/dev/null 2>&1 || true
+            fi
+        fi
+    fi
+    unset _current_sha _latest_sha _old_ver _new_ver
+fi
+
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 #  STEP 1: What do you want to do?
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
