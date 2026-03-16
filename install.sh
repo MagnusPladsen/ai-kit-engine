@@ -1953,6 +1953,7 @@ if [ "$FLAG_ACTION" = false ] && [ "${SKIP_MENU:-false}" != true ]; then
                 "★ Install from team config" "— Apply .${KT_WATERMARK}-config (${#_tc_rules[@]} rules, ${#_tc_skills[@]} skills, ${#_tc_plugins[@]} plugins)" \
                 "Install (customize)" "— Use team config as defaults, then tweak" \
                 "Install (fresh)" "— Ignore config, pick everything yourself" \
+                "Delete team config" "— Remove .${KT_WATERMARK}-config from this project" \
                 "Manage" "— View, add, remove, update, or check installed items" \
                 "Uninstall" "— Remove all kit files (restores backups)" \
                 "Exit" "— Quit installer"
@@ -1987,6 +1988,27 @@ if [ "$FLAG_ACTION" = false ] && [ "${SKIP_MENU:-false}" != true ]; then
             MODE="install"
             ;;
         "Install (fresh)"|"Install") MODE="install" ;;
+        "Delete team config")
+            _tc_path="$(pwd)/.${KT_WATERMARK}-config"
+            echo ""
+            echo "  ${BOLD}${WHITE}Delete team config?${RESET}"
+            echo "  ${DIM}${_tc_path}${RESET}"
+            echo ""
+            single_select "Are you sure?" \
+                "Yes, delete it" "— Remove .${KT_WATERMARK}-config" \
+                "Cancel" "— Keep the file"
+            if [ "$SELECTED_ITEM" = "Yes, delete it" ]; then
+                rm -f "$_tc_path"
+                HAS_TEAM_CONFIG=false
+                echo ""
+                echo "  ${GREEN}✓${RESET} Team config deleted."
+                echo ""
+                echo "  ${DIM}Press any key to continue...${RESET}"
+                read -rsn1
+            fi
+            BACK_TO_ACTION=true
+            continue
+            ;;
         "Manage") MODE="manage" ;;
         "Uninstall") MODE="uninstall" ;;
         "Exit"|"__BACK__") exit 0 ;;
@@ -2184,18 +2206,12 @@ if [ "$MODE" = "manage" ]; then
     echo ""
 
     # Ask what to do
-    _manage_opts=(
-        "Add rules/skills" "— Install additional items"
-        "Remove individual items" "— Uninstall specific rules or skills"
-        "Update" "— Re-sync installed files with latest kit version"
-        "Check sync" "— Verify installed files match kit source"
-    )
-    # Show "Delete team config" if a team config file exists in the manage directory
-    if [ -f "$MANAGE_DIR/.${KT_WATERMARK}-config" ]; then
-        _manage_opts+=("Delete team config" "— Remove .${KT_WATERMARK}-config from this project")
-    fi
-    _manage_opts+=("Done" "— Back to main menu")
-    single_select "What would you like to do?" "${_manage_opts[@]}"
+    single_select "What would you like to do?" \
+        "Add rules/skills" "— Install additional items" \
+        "Remove individual items" "— Uninstall specific rules or skills" \
+        "Update" "— Re-sync installed files with latest kit version" \
+        "Check sync" "— Verify installed files match kit source" \
+        "Done" "— Back to main menu"
 
     case "$SELECTED_ITEM" in
         "Add rules/skills")
@@ -2486,28 +2502,6 @@ if [ "$MODE" = "manage" ]; then
                 echo ""
                 echo "  ${WARN}${out_of_sync} file(s) out of date${RESET}, ${GREEN}${in_sync} in sync${RESET}"
                 echo "  ${DIM}Select Update to re-sync${RESET}"
-            fi
-            echo ""
-            echo "  ${DIM}Press any key to continue...${RESET}"
-            read -rsn1
-            ;;
-        "Delete team config")
-            _tc_path="$MANAGE_DIR/.${KT_WATERMARK}-config"
-            echo ""
-            echo "  ${BOLD}${WHITE}Delete team config?${RESET}"
-            echo "  ${DIM}${_tc_path}${RESET}"
-            echo ""
-            single_select "Are you sure?" \
-                "Yes, delete it" "— Remove .${KT_WATERMARK}-config" \
-                "Cancel" "— Keep the file"
-            if [ "$SELECTED_ITEM" = "Yes, delete it" ]; then
-                rm -f "$_tc_path"
-                HAS_TEAM_CONFIG=false
-                echo ""
-                echo "  ${GREEN}✓${RESET} Team config deleted."
-            else
-                echo ""
-                echo "  ${DIM}Cancelled.${RESET}"
             fi
             echo ""
             echo "  ${DIM}Press any key to continue...${RESET}"
