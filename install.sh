@@ -2184,12 +2184,18 @@ if [ "$MODE" = "manage" ]; then
     echo ""
 
     # Ask what to do
-    single_select "What would you like to do?" \
-        "Add rules/skills" "— Install additional items" \
-        "Remove individual items" "— Uninstall specific rules or skills" \
-        "Update" "— Re-sync installed files with latest kit version" \
-        "Check sync" "— Verify installed files match kit source" \
-        "Done" "— Back to main menu"
+    _manage_opts=(
+        "Add rules/skills" "— Install additional items"
+        "Remove individual items" "— Uninstall specific rules or skills"
+        "Update" "— Re-sync installed files with latest kit version"
+        "Check sync" "— Verify installed files match kit source"
+    )
+    # Show "Delete team config" if a team config file exists in the manage directory
+    if [ -f "$MANAGE_DIR/.${KT_WATERMARK}-config" ]; then
+        _manage_opts+=("Delete team config" "— Remove .${KT_WATERMARK}-config from this project")
+    fi
+    _manage_opts+=("Done" "— Back to main menu")
+    single_select "What would you like to do?" "${_manage_opts[@]}"
 
     case "$SELECTED_ITEM" in
         "Add rules/skills")
@@ -2485,6 +2491,28 @@ if [ "$MODE" = "manage" ]; then
             echo "  ${DIM}Press any key to continue...${RESET}"
             read -rsn1
             ;;
+        "Delete team config")
+            _tc_path="$MANAGE_DIR/.${KT_WATERMARK}-config"
+            echo ""
+            echo "  ${BOLD}${WHITE}Delete team config?${RESET}"
+            echo "  ${DIM}${_tc_path}${RESET}"
+            echo ""
+            single_select "Are you sure?" \
+                "Yes, delete it" "— Remove .${KT_WATERMARK}-config" \
+                "Cancel" "— Keep the file"
+            if [ "$SELECTED_ITEM" = "Yes, delete it" ]; then
+                rm -f "$_tc_path"
+                HAS_TEAM_CONFIG=false
+                echo ""
+                echo "  ${GREEN}✓${RESET} Team config deleted."
+            else
+                echo ""
+                echo "  ${DIM}Cancelled.${RESET}"
+            fi
+            echo ""
+            echo "  ${DIM}Press any key to continue...${RESET}"
+            read -rsn1
+            ;;
         "Done"|"__BACK__")
             MANAGE_LOOP=false
             ;;
@@ -2615,7 +2643,11 @@ if [ "$MODE" = "update" ]; then
     echo ""
     bar
     echo ""
-    echo "  ${BOLD}${LIME}✓ Updated ${updated} file(s)${RESET}"
+    if [ "$updated" -eq 0 ]; then
+        echo "  ${BOLD}${LIME}✓ All files are already up to date${RESET}"
+    else
+        echo "  ${BOLD}${LIME}✓ Updated ${updated} file(s)${RESET}"
+    fi
     echo ""
 
     # Show what's new since pre-update version
