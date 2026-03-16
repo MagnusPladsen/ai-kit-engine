@@ -51,6 +51,7 @@ bash install.sh
 - **Multi-tool support** -- one install configures Claude, Gemini, Codex, OpenCode, Crush, Windsurf, Continue.dev, Copilot, and Cursor
 - **Global + project install modes** -- project mode for repos, global mode for symlinked central config
 - **Manage mode** -- re-run to add, remove, or update individual items
+- **Auto-update prompt** -- detects new engine versions on startup, lets you update now or skip
 - **Dry run mode** -- preview changes before writing anything
 
 ## `kit.toml` quick reference
@@ -103,7 +104,7 @@ See [docs/REFERENCE.md](docs/REFERENCE.md) for the full field reference and defa
 ```
 your-ai-kit/
 ├── kit.toml                # Branding, stacks, themes, settings
-├── install.sh              # Thin wrapper (~15 lines)
+├── install.sh              # Thin wrapper (~10 lines)
 ├── branding/
 │   └── ascii.txt           # ASCII art logo (optional)
 ├── rules/
