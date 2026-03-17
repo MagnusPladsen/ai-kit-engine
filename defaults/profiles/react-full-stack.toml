@@ -4,12 +4,17 @@ stacks = ["react", "integrations"]
 
 [rules]
 items = ["commit-conventions", "no-auto-push", "plan-refinement", "security", "logging",
+         "code-quality", "naming-conventions", "no-phantom-code", "reusable-code",
+         "minimal-diff", "design-consistency", "dependency-management",
+         "testing-conventions", "pr-conventions", "database",
          "typescript", "accessibility", "components", "internationalization",
          "no-hardcoded-colors", "responsive-web-ui", "api-integration",
-         "bitbucket", "azure-devops", "jira"]
+         "github", "bitbucket", "azure-devops", "jira"]
 
 [skills]
-items = ["commit", "create-pr", "new-issue", "review", "refactor", "document", "debug"]
+items = ["commit", "create-pr", "new-issue", "review", "refactor", "document",
+         "debug", "test", "changelog", "onboard"]
 
 [plugins]
-items = ["superpowers", "ui-ux-pro-max", "coderabbit", "context7", "commit-commands"]
+items = ["superpowers", "ui-ux-pro-max", "coderabbit", "context7",
+         "commit-commands", "typescript-lsp", "atlassian", "figma"]

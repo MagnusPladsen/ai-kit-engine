@@ -921,10 +921,24 @@ if [ "$MODE" = "uninstall" ]; then
     echo ""
 
     # Detect where the kit is installed
-    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+    _has_global=false
+    _has_project=false
+    [ -d "$HOME/$KT_CONFIG_DIR/.claude" ] && _has_global=true
+    [ -d "$(pwd)/.claude/rules" ] && [ "$(pwd)" != "$HOME/$KT_CONFIG_DIR" ] && _has_project=true
+
+    if [ "$_has_global" = true ] && [ "$_has_project" = true ]; then
+        single_select "Which installation do you want to uninstall?" \
+            "Global" "~/$KT_CONFIG_DIR/" \
+            "Project" "$(pwd)/"
+        if [ "$SELECTED_INDEX" = "0" ]; then
+            UNINST_DIR="$HOME/$KT_CONFIG_DIR"
+        else
+            UNINST_DIR="$(pwd)"
+        fi
+    elif [ "$_has_global" = true ]; then
         UNINST_DIR="$HOME/$KT_CONFIG_DIR"
         echo "  ${DIM}Found global install at ~/$KT_CONFIG_DIR/${RESET}"
-    elif [ -d "$(pwd)/.claude/rules" ]; then
+    elif [ "$_has_project" = true ]; then
         UNINST_DIR="$(pwd)"
         echo "  ${DIM}Found project install at $(pwd)/${RESET}"
     else
@@ -973,16 +987,18 @@ if [ "$MODE" = "uninstall" ]; then
     done
 
     # Remove AI tool files (only if they match kit AGENT.md content)
-    for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
-        target="$UNINST_DIR/$name"
-        if [ -f "$target" ]; then
-            if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
-                safe_remove "$target" "$name"
-            else
-                echo "  ${DIM}· $name (has custom content — kept)${RESET}"
+    if [ -f "$KIT_DIR/AGENT.md" ]; then
+        for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
+            target="$UNINST_DIR/$name"
+            if [ -f "$target" ]; then
+                if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
+                    safe_remove "$target" "$name"
+                else
+                    echo "  ${DIM}· $name (has custom content — kept)${RESET}"
+                fi
             fi
-        fi
-    done
+        done
+    fi
 
     # Remove plugins and MCP servers (if claude CLI is available)
     if command -v claude >/dev/null 2>&1; then
@@ -2061,10 +2077,25 @@ fi
 if [ "$MODE" = "uninstall" ] && [ "$FLAG_ACTION" = false ]; then
     echo "  ${BOLD}${WHITE}Uninstalling...${RESET}"
     echo ""
-    if [ -d "$HOME/$KT_CONFIG_DIR/.claude" ]; then
+
+    _has_global=false
+    _has_project=false
+    [ -d "$HOME/$KT_CONFIG_DIR/.claude" ] && _has_global=true
+    [ -d "$(pwd)/.claude/rules" ] && [ "$(pwd)" != "$HOME/$KT_CONFIG_DIR" ] && _has_project=true
+
+    if [ "$_has_global" = true ] && [ "$_has_project" = true ]; then
+        single_select "Which installation do you want to uninstall?" \
+            "Global" "~/$KT_CONFIG_DIR/" \
+            "Project" "$(pwd)/"
+        if [ "$SELECTED_INDEX" = "0" ]; then
+            UNINST_DIR="$HOME/$KT_CONFIG_DIR"
+        else
+            UNINST_DIR="$(pwd)"
+        fi
+    elif [ "$_has_global" = true ]; then
         UNINST_DIR="$HOME/$KT_CONFIG_DIR"
         echo "  ${DIM}Found global install at ~/$KT_CONFIG_DIR/${RESET}"
-    elif [ -d "$(pwd)/.claude/rules" ]; then
+    elif [ "$_has_project" = true ]; then
         UNINST_DIR="$(pwd)"
         echo "  ${DIM}Found project install at $(pwd)/${RESET}"
     else
@@ -2102,16 +2133,18 @@ if [ "$MODE" = "uninstall" ] && [ "$FLAG_ACTION" = false ]; then
             rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
         done
     done
-    for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
-        target="$UNINST_DIR/$name"
-        if [ -f "$target" ]; then
-            if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
-                safe_remove "$target" "$name"
-            else
-                echo "  ${DIM}· $name (has custom content — kept)${RESET}"
+    if [ -f "$KIT_DIR/AGENT.md" ]; then
+        for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
+            target="$UNINST_DIR/$name"
+            if [ -f "$target" ]; then
+                if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
+                    safe_remove "$target" "$name"
+                else
+                    echo "  ${DIM}· $name (has custom content — kept)${RESET}"
+                fi
             fi
-        fi
-    done
+        done
+    fi
     echo ""
     bar
     echo ""
@@ -2621,17 +2654,19 @@ if [ "$MODE" = "update" ]; then
         fi
     }
 
-    # Update AGENT.md
-    if [ -f "$UPDATE_DIR/AGENT.md" ]; then
-        update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/AGENT.md" "AGENT.md"
-    fi
-
-    # Update AI tool copies (project install)
-    for name in "${_WRAPPER_FILES[@]}"; do
-        if [ -f "$UPDATE_DIR/$name" ]; then
-            update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/$name" "$name"
+    # Update AGENT.md (only if the content repo provides one)
+    if [ -f "$KIT_DIR/AGENT.md" ]; then
+        if [ -f "$UPDATE_DIR/AGENT.md" ]; then
+            update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/AGENT.md" "AGENT.md"
         fi
-    done
+
+        # Update AI tool copies (project install)
+        for name in "${_WRAPPER_FILES[@]}"; do
+            if [ -f "$UPDATE_DIR/$name" ]; then
+                update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/$name" "$name"
+            fi
+        done
+    fi
 
     # Update rules (check content repo first, then engine defaults)
     for installed_rule in "$UPDATE_DIR/.claude/rules/"*.md; do
@@ -3601,9 +3636,11 @@ if [ "$BACK_TO_ACTION" = true ]; then continue; fi
 do_mkdir "$TARGET_DIR/.claude/rules"
 do_mkdir "$TARGET_DIR/.claude/skills"
 
-# Copy AGENT.md
-if [ ! -f "$TARGET_DIR/AGENT.md" ] || [ "$MODE" = "update" ]; then
-    do_cp "$KIT_DIR/AGENT.md" "$TARGET_DIR/AGENT.md"
+# Copy AGENT.md (only if the content repo provides one)
+if [ -f "$KIT_DIR/AGENT.md" ]; then
+    if [ ! -f "$TARGET_DIR/AGENT.md" ] || [ "$MODE" = "update" ]; then
+        do_cp "$KIT_DIR/AGENT.md" "$TARGET_DIR/AGENT.md"
+    fi
 fi
 
 # Install rules
@@ -3755,7 +3792,7 @@ fi
 
 # ─── Project-level AI tool files (project install only) ─────────────────────
 
-if [ "$INSTALL_GLOBAL" = false ]; then
+if [ "$INSTALL_GLOBAL" = false ] && [ -f "$KIT_DIR/AGENT.md" ]; then
     local_existing=()
     for name in "${_WRAPPER_FILES[@]}"; do
         if [ -f "$TARGET_DIR/$name" ]; then
@@ -3843,7 +3880,9 @@ echo ""
 
 # Next steps
 echo "  ${BOLD}${WHITE}Next steps:${RESET}"
-echo "    ${TEAL}→${RESET} Review AGENT.md and add project-specific context"
+if [ -f "$KIT_DIR/AGENT.md" ]; then
+    echo "    ${TEAL}→${RESET} Review AGENT.md and add project-specific context"
+fi
 if [ "$INSTALL_GLOBAL" = false ]; then
     echo "    ${TEAL}→${RESET} Commit .claude/ to share rules with your team"
     if [ ! -f "$(pwd)/.${KT_WATERMARK}-config" ]; then

@@ -3,7 +3,8 @@ description = "Shared rules + commit skill only"
 stacks = []
 
 [rules]
-items = ["commit-conventions", "no-auto-push", "plan-refinement", "security"]
+items = ["commit-conventions", "no-auto-push", "plan-refinement", "security",
+         "code-quality", "naming-conventions", "no-phantom-code", "minimal-diff"]
 
 [skills]
 items = ["commit", "review"]
