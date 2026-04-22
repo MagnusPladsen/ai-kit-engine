@@ -4,7 +4,7 @@ description: Structured debugging — reproduce, isolate, fix, verify
 user_invocable: true
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # /debug
 

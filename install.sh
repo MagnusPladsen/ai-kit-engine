@@ -68,6 +68,7 @@ KT_WATERMARK="ai-kit"
 KT_CONFIG_DIR=".ai-kit"
 KT_ASCII_ART_FILE=""
 KT_DEFAULT_THEME="Tokyo Night"
+KT_PRIORITY_SCOPE="project-first"
 KT_DEFAULTS_RULES=true
 KT_DEFAULTS_SKILLS=true
 KT_DEFAULTS_REGISTRY=true
@@ -203,7 +204,8 @@ _parse_kit_toml() {
                     ;;
                 settings)
                     case "$key" in
-                        default_theme) KT_DEFAULT_THEME="$val" ;;
+                        default_theme)  KT_DEFAULT_THEME="$val" ;;
+                        priority_scope) KT_PRIORITY_SCOPE="$val" ;;
                     esac
                     ;;
                 defaults)
@@ -488,15 +490,15 @@ THEMES+=("Tokyo Night" "Monokai Pro" "GitHub Dark" "Rider Dark" "Dracula" "One D
 # ─── Settings file ────────────────────────────────────────────────────────────
 # Simple TOML-like key = "value" store, human-editable
 
-ABARIS_CONFIG="$HOME/$KT_CONFIG_DIR/.config"
+KT_SETTINGS_FILE="$HOME/$KT_CONFIG_DIR/.config"
 
 # Read a value from config. Returns empty string if key not found.
 # Usage: val=$(config_read "theme")
 config_read() {
     local key="$1"
-    if [ ! -f "$ABARIS_CONFIG" ]; then echo ""; return; fi
+    if [ ! -f "$KT_SETTINGS_FILE" ]; then echo ""; return; fi
     local line
-    line=$(grep -E "^${key} *= *" "$ABARIS_CONFIG" 2>/dev/null | head -1)
+    line=$(grep -E "^${key} *= *" "$KT_SETTINGS_FILE" 2>/dev/null | head -1)
     if [ -z "$line" ]; then echo ""; return; fi
     # Strip key, equals, quotes, whitespace
     echo "$line" | sed 's/^[^=]*= *//; s/^"//; s/"$//'
@@ -506,16 +508,16 @@ config_read() {
 # Usage: config_write "theme" "Tokyo Night"
 config_write() {
     local key="$1" value="$2"
-    mkdir -p "$(dirname "$ABARIS_CONFIG")"
-    if [ ! -f "$ABARIS_CONFIG" ]; then
-        printf '# %s settings\n' "$KT_NAME" > "$ABARIS_CONFIG"
+    mkdir -p "$(dirname "$KT_SETTINGS_FILE")"
+    if [ ! -f "$KT_SETTINGS_FILE" ]; then
+        printf '# %s settings\n' "$KT_NAME" > "$KT_SETTINGS_FILE"
     fi
-    if grep -qE "^${key} *= *" "$ABARIS_CONFIG" 2>/dev/null; then
+    if grep -qE "^${key} *= *" "$KT_SETTINGS_FILE" 2>/dev/null; then
         # Update existing key (portable sed -i)
-        local tmp="${ABARIS_CONFIG}.tmp"
-        sed "s|^${key} *= *.*|${key} = \"${value}\"|" "$ABARIS_CONFIG" > "$tmp" && mv "$tmp" "$ABARIS_CONFIG"
+        local tmp="${KT_SETTINGS_FILE}.tmp"
+        sed "s|^${key} *= *.*|${key} = \"${value}\"|" "$KT_SETTINGS_FILE" > "$tmp" && mv "$tmp" "$KT_SETTINGS_FILE"
     else
-        printf '%s = "%s"\n' "$key" "$value" >> "$ABARIS_CONFIG"
+        printf '%s = "%s"\n' "$key" "$value" >> "$KT_SETTINGS_FILE"
     fi
 }
 
@@ -590,7 +592,7 @@ show_logo() {
         echo "${G1}${BOLD}   ${KT_SHORT_NAME}${RESET}"
     fi
     echo ""
-    # Space out the short name for the subtitle (e.g. "ABARIS" → "A B A R I S")
+    # Space out the short name for the subtitle (e.g. "AI-KIT" → "A I - K I T")
     local _spaced=""
     local _i
     for ((_i=0; _i<${#KT_SHORT_NAME}; _i++)); do
@@ -758,6 +760,53 @@ fi
 config_write "last_engine_version" "$ENGINE_VERSION"
 unset _last_ver _show _ver _last_engine_ver
 
+# ─── Template rendering ──────────────────────────────────────────────────────
+
+TEMPLATE_WATERMARK="__KIT_WATERMARK__"
+
+render_source_file() {
+    local src="$1"
+    local dst="$2"
+
+    cp "$src" "$dst"
+
+    if grep -q "$TEMPLATE_WATERMARK" "$dst" 2>/dev/null; then
+        sed -i.bak "s|$TEMPLATE_WATERMARK|$KT_WATERMARK|g" "$dst"
+        rm -f "$dst.bak"
+    fi
+
+    if [ -n "${_priority_text:-}" ] && grep -q '<!-- PRIORITY_SCOPE -->' "$dst" 2>/dev/null; then
+        sed -i.bak "s|<!-- PRIORITY_SCOPE -->|${_priority_text}|" "$dst"
+        rm -f "$dst.bak"
+    fi
+}
+
+source_matches_installed() {
+    local src="$1"
+    local dst="$2"
+    local tmp
+    local status=0
+
+    [ -f "$dst" ] || return 1
+
+    tmp=$(mktemp)
+    render_source_file "$src" "$tmp"
+    diff -q "$tmp" "$dst" >/dev/null 2>&1 || status=$?
+    rm -f "$tmp"
+    return $status
+}
+
+copy_rendered_file() {
+    local src="$1"
+    local dst="$2"
+    local tmp
+
+    tmp=$(mktemp)
+    render_source_file "$src" "$tmp"
+    cp "$tmp" "$dst"
+    rm -f "$tmp"
+}
+
 # ─── Check mode: verify sync status and exit ─────────────────────────────────
 
 if [ "$MODE" = "check" ]; then
@@ -789,7 +838,7 @@ if [ "$MODE" = "check" ]; then
         name=$(basename "$kit_rule")
         local installed="$CHECK_DIR/.claude/rules/$name"
         if [ -f "$installed" ]; then
-            if diff -q "$kit_rule" "$installed" >/dev/null 2>&1; then
+            if source_matches_installed "$kit_rule" "$installed"; then
                 in_sync=$((in_sync + 1))
             elif [ -L "$installed" ]; then
                 in_sync=$((in_sync + 1))
@@ -813,7 +862,7 @@ if [ "$MODE" = "check" ]; then
         name=$(basename "$(dirname "$kit_skill")")
         local installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
         if [ -f "$installed" ]; then
-            if diff -q "$kit_skill" "$installed" >/dev/null 2>&1; then
+            if source_matches_installed "$kit_skill" "$installed"; then
                 in_sync=$((in_sync + 1))
             elif [ -L "$installed" ]; then
                 in_sync=$((in_sync + 1))
@@ -914,6 +963,22 @@ count_category_tokens() {
     echo $total
 }
 
+# ─── Resolve AGENT.md source ────────────────────────────────────────────────
+
+_AGENT_MD_SRC=""
+if [ -f "$KIT_DIR/AGENT.md" ]; then
+    _AGENT_MD_SRC="$KIT_DIR/AGENT.md"
+elif [ -f "$ENGINE_DIR/defaults/AGENT.md" ]; then
+    _AGENT_MD_SRC="$ENGINE_DIR/defaults/AGENT.md"
+fi
+
+# Pre-compute priority scope text for AGENT.md injection
+if [ "$KT_PRIORITY_SCOPE" = "global-first" ]; then
+    _priority_text="When rules or instructions conflict, follow this priority order:\n\n1. **Global-level** (~\/.claude\/rules\/, ~\/.claude\/CLAUDE.md) — highest priority\n2. **Project-level** (.claude\/rules\/, CLAUDE.md in project root) — local overrides\n\nGlobal rules represent organization-wide standards and take precedence over project-specific rules."
+else
+    _priority_text="When rules or instructions conflict, follow this priority order:\n\n1. **Project-level** (.claude\/rules\/, CLAUDE.md in project root) — highest priority\n2. **Global-level** (~\/.claude\/rules\/, ~\/.claude\/CLAUDE.md) — fallback defaults\n\nProject-scoped rules are tailored to the current repository and always take precedence over global rules."
+fi
+
 # ─── Uninstall mode ──────────────────────────────────────────────────────────
 
 if [ "$MODE" = "uninstall" ]; then
@@ -987,11 +1052,11 @@ if [ "$MODE" = "uninstall" ]; then
     done
 
     # Remove AI tool files (only if they match kit AGENT.md content)
-    if [ -f "$KIT_DIR/AGENT.md" ]; then
+    if [ -n "$_AGENT_MD_SRC" ]; then
         for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
             target="$UNINST_DIR/$name"
             if [ -f "$target" ]; then
-                if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
+                if source_matches_installed "$_AGENT_MD_SRC" "$target"; then
                     safe_remove "$target" "$name"
                 else
                     echo "  ${DIM}· $name (has custom content — kept)${RESET}"
@@ -1102,7 +1167,7 @@ do_cp() {
 
     # Back up existing file if it differs from source
     if [ -f "$dst" ]; then
-        if ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+        if ! source_matches_installed "$src" "$dst"; then
             local bak="${dst}.before-${KT_WATERMARK}"
             if [ ! -f "$bak" ]; then
                 cp "$dst" "$bak"
@@ -1111,7 +1176,7 @@ do_cp() {
         fi
     fi
 
-    cp "$src" "$dst"
+    copy_rendered_file "$src" "$dst"
 }
 
 do_mkdir() {
@@ -2133,11 +2198,11 @@ if [ "$MODE" = "uninstall" ] && [ "$FLAG_ACTION" = false ]; then
             rmdir "$UNINST_DIR/.claude/skills/$skill_name" 2>/dev/null
         done
     done
-    if [ -f "$KIT_DIR/AGENT.md" ]; then
+    if [ -n "$_AGENT_MD_SRC" ]; then
         for name in AGENT.md "${_WRAPPER_FILES[@]}"; do
             target="$UNINST_DIR/$name"
             if [ -f "$target" ]; then
-                if diff -q "$KIT_DIR/AGENT.md" "$target" >/dev/null 2>&1; then
+                if source_matches_installed "$_AGENT_MD_SRC" "$target"; then
                     safe_remove "$target" "$name"
                 else
                     echo "  ${DIM}· $name (has custom content — kept)${RESET}"
@@ -2517,7 +2582,7 @@ if [ "$MODE" = "manage" ]; then
                 _seen_sync_rules+=("$name")
                 installed="$CHECK_DIR/.claude/rules/$name"
                 if [ -f "$installed" ]; then
-                    if diff -q "$kit_rule" "$installed" >/dev/null 2>&1 || [ -L "$installed" ]; then
+                    if source_matches_installed "$kit_rule" "$installed" || [ -L "$installed" ]; then
                         in_sync=$((in_sync + 1))
                     else
                         echo "  ${WARN}↻${RESET} ${name} ${DIM}(out of date)${RESET}"
@@ -2548,7 +2613,7 @@ if [ "$MODE" = "manage" ]; then
                 _seen_sync_skills+=("$name")
                 installed="$CHECK_DIR/.claude/skills/$name/SKILL.md"
                 if [ -f "$installed" ]; then
-                    if diff -q "$kit_skill" "$installed" >/dev/null 2>&1 || [ -L "$installed" ]; then
+                    if source_matches_installed "$kit_skill" "$installed" || [ -L "$installed" ]; then
                         in_sync=$((in_sync + 1))
                     else
                         echo "  ${WARN}↻${RESET} skills/${name} ${DIM}(out of date)${RESET}"
@@ -2640,13 +2705,13 @@ if [ "$MODE" = "update" ]; then
         local src="$1"
         local dst="$2"
         local label="$3"
-        if [ -f "$dst" ] && ! diff -q "$src" "$dst" >/dev/null 2>&1; then
+        if [ -f "$dst" ] && ! source_matches_installed "$src" "$dst"; then
             local bak="${dst}.before-${KT_WATERMARK}"
             if [ ! -f "$bak" ]; then
                 cp "$dst" "$bak"
                 echo "  ${DIM}backed up: $(basename "$dst") → $(basename "$bak")${RESET}"
             fi
-            cp "$src" "$dst"
+            copy_rendered_file "$src" "$dst"
             echo "  ${GREEN}✓${RESET} $label ${DIM}(updated)${RESET}"
             updated=$((updated + 1))
         elif [ -f "$dst" ]; then
@@ -2654,16 +2719,16 @@ if [ "$MODE" = "update" ]; then
         fi
     }
 
-    # Update AGENT.md (only if the content repo provides one)
-    if [ -f "$KIT_DIR/AGENT.md" ]; then
+    # Update AGENT.md
+    if [ -n "$_AGENT_MD_SRC" ]; then
         if [ -f "$UPDATE_DIR/AGENT.md" ]; then
-            update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/AGENT.md" "AGENT.md"
+            update_file "$_AGENT_MD_SRC" "$UPDATE_DIR/AGENT.md" "AGENT.md"
         fi
 
         # Update AI tool copies (project install)
         for name in "${_WRAPPER_FILES[@]}"; do
             if [ -f "$UPDATE_DIR/$name" ]; then
-                update_file "$KIT_DIR/AGENT.md" "$UPDATE_DIR/$name" "$name"
+                update_file "$_AGENT_MD_SRC" "$UPDATE_DIR/$name" "$name"
             fi
         done
     fi
@@ -3636,10 +3701,20 @@ if [ "$BACK_TO_ACTION" = true ]; then continue; fi
 do_mkdir "$TARGET_DIR/.claude/rules"
 do_mkdir "$TARGET_DIR/.claude/skills"
 
-# Copy AGENT.md (only if the content repo provides one)
-if [ -f "$KIT_DIR/AGENT.md" ]; then
+# Copy AGENT.md (content repo → engine default fallback)
+if [ -n "$_AGENT_MD_SRC" ]; then
     if [ ! -f "$TARGET_DIR/AGENT.md" ] || [ "$MODE" = "update" ]; then
-        do_cp "$KIT_DIR/AGENT.md" "$TARGET_DIR/AGENT.md"
+        do_cp "$_AGENT_MD_SRC" "$TARGET_DIR/AGENT.md"
+        # Inject priority scope instructions if the placeholder exists
+        if [ "$DRY_RUN" != true ] && grep -q '<!-- PRIORITY_SCOPE -->' "$TARGET_DIR/AGENT.md" 2>/dev/null; then
+            if [ "$KT_PRIORITY_SCOPE" = "global-first" ]; then
+                _priority_text="When rules or instructions conflict, follow this priority order:\n\n1. **Global-level** (~\/.claude\/rules\/, ~\/.claude\/CLAUDE.md) — highest priority\n2. **Project-level** (.claude\/rules\/, CLAUDE.md in project root) — local overrides\n\nGlobal rules represent organization-wide standards and take precedence over project-specific rules."
+            else
+                _priority_text="When rules or instructions conflict, follow this priority order:\n\n1. **Project-level** (.claude\/rules\/, CLAUDE.md in project root) — highest priority\n2. **Global-level** (~\/.claude\/rules\/, ~\/.claude\/CLAUDE.md) — fallback defaults\n\nProject-scoped rules are tailored to the current repository and always take precedence over global rules."
+            fi
+            sed -i.bak "s|<!-- PRIORITY_SCOPE -->|${_priority_text}|" "$TARGET_DIR/AGENT.md"
+            rm -f "$TARGET_DIR/AGENT.md.bak"
+        fi
     fi
 fi
 
@@ -3792,15 +3867,20 @@ fi
 
 # ─── Project-level AI tool files (project install only) ─────────────────────
 
-if [ "$INSTALL_GLOBAL" = false ] && [ -f "$KIT_DIR/AGENT.md" ]; then
+if [ "$INSTALL_GLOBAL" = false ] && [ -n "$_AGENT_MD_SRC" ]; then
     local_existing=()
     for name in "${_WRAPPER_FILES[@]}"; do
         if [ -f "$TARGET_DIR/$name" ]; then
-            if ! diff -q "$KIT_DIR/AGENT.md" "$TARGET_DIR/$name" >/dev/null 2>&1; then
+            if ! source_matches_installed "$_AGENT_MD_SRC" "$TARGET_DIR/$name"; then
                 local_existing[${#local_existing[@]}]="$name"
             fi
         else
-            do_cp "$KIT_DIR/AGENT.md" "$TARGET_DIR/$name"
+            do_cp "$_AGENT_MD_SRC" "$TARGET_DIR/$name"
+            # Inject priority scope into wrapper file too
+            if [ "$DRY_RUN" != true ] && grep -q '<!-- PRIORITY_SCOPE -->' "$TARGET_DIR/$name" 2>/dev/null; then
+                sed -i.bak "s|<!-- PRIORITY_SCOPE -->|${_priority_text}|" "$TARGET_DIR/$name"
+                rm -f "$TARGET_DIR/$name.bak"
+            fi
         fi
     done
     echo "  ${GREEN}✓${RESET} AI tool files ready"
@@ -3880,7 +3960,7 @@ echo ""
 
 # Next steps
 echo "  ${BOLD}${WHITE}Next steps:${RESET}"
-if [ -f "$KIT_DIR/AGENT.md" ]; then
+if [ -n "$_AGENT_MD_SRC" ]; then
     echo "    ${TEAL}→${RESET} Review AGENT.md and add project-specific context"
 fi
 if [ "$INSTALL_GLOBAL" = false ]; then

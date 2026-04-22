@@ -3,7 +3,7 @@ description: Plan quality — triggers when creating implementation plans
 alwaysApply: true
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # Plan Refinement
 

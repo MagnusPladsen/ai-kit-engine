@@ -11,6 +11,8 @@ ascii_art_file = ""
 
 [settings]
 default_theme = "Tokyo Night"
+# Priority order for rules/skills when conflicts arise: "project-first" or "global-first"
+priority_scope = "project-first"
 
 [defaults]
 rules = true

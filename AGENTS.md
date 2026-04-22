@@ -9,9 +9,9 @@ This is the **engine** — a reusable, brand-agnostic installer that content rep
 ## Key Constraints
 
 - **Never hardcode brand names** — all branding comes from `kit.toml`
-- **Never break backward compatibility** — see `.claude/rules/no-breaking-changes.md`
-- **Every commit bumps VERSION** — see `.claude/rules/versioning.md`
-- **Never auto-push** — see `.claude/rules/no-auto-push.md`
+- **Never break backward compatibility** — see `.Codex/rules/no-breaking-changes.md`
+- **Every commit bumps VERSION** — see `.Codex/rules/versioning.md`
+- **Never auto-push** — see `.Codex/rules/no-auto-push.md`
 
 ## Architecture
 
@@ -38,7 +38,7 @@ content-repo/           # e.g. team-ai-kit, acme-ai-kit
 
 ## Rules
 
-Rules in `.claude/rules/` are loaded automatically. Key rules:
+Rules in `.Codex/rules/` are loaded automatically. Key rules:
 - `engine-scope.md` — Keep engine generic, no brand-specific content
 - `no-breaking-changes.md` — Backward compatibility contract
 - `versioning.md` — Version bump on every commit

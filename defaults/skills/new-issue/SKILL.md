@@ -4,7 +4,7 @@ description: Start work on a new issue from ticket system
 user_invocable: true
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # /new-issue
 

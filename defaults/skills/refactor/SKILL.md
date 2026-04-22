@@ -4,7 +4,7 @@ description: Guided refactoring with safety checks (tests before and after)
 user_invocable: true
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # /refactor
 

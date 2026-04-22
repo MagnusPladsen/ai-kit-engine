@@ -4,11 +4,11 @@ globs: "**/*"
 alwaysApply: false
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # Bitbucket Conventions
 
-Abaris primarily uses Bitbucket for source control.
+Use these conventions when working with Bitbucket repositories.
 
 ## Detecting Bitbucket
 

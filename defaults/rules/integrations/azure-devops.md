@@ -4,7 +4,7 @@ globs: "**/*"
 alwaysApply: false
 ---
 
-<!-- abaris-ai-kit | Do not edit - managed by install.sh | Run install.sh --check to verify -->
+<!-- __KIT_WATERMARK__ | Do not edit - managed by install.sh | Run install.sh --check to verify -->
 
 # Azure DevOps Conventions
 
